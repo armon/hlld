@@ -1,0 +1,12 @@
+*.a
+*.dylib
+*.o
+*.os
+.lvimrc
+.sconsign.dblite
+tests/build/
+deps/check-0.9.8
+test_libbloom_runner
+test_bloomd_runner
+.vagrant
+*.pyc
