@@ -1,0 +1,5 @@
+language: c
+before_install:
+  - ????
+  - PROFIT!!1
+script: echo "Passing build =)"
