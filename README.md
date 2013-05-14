@@ -1,7 +1,7 @@
-HLLD [![Build Status](https://travis-ci.org/armon/hlld.png?branch=master)](https://travis-ci.org/armon/hlld)
+hlld [![Build Status](https://travis-ci.org/armon/hlld.png?branch=master)](https://travis-ci.org/armon/hlld)
 =========
 
-HLLD is a high-performance C server which is used
+hlld is a high-performance C server which is used
 to expose HyperLogLog sets and operations over them to
 networked clients. It uses a simple ASCI protocol
 which is human readable, and similar to memcached.
@@ -45,7 +45,7 @@ successfully.
 Usage
 -----
 
-Hlld can be configured using a file which is in INI format.
+hlld can be configured using a file which is in INI format.
 Here is an example configuration file:
 
 ::
