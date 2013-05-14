@@ -100,7 +100,9 @@ and can contain the characters a-z, A-Z, 0-9, ., _.
 If a precision is provided the set
 will be created with the given bits of precision, otherwise the configured default value will be used.
 If a maximum epsilon is provided, that will be used to compute a precision, otherwise the configured default is used.
-You can optionally specify in_memory to force the set to not be persisted to disk.
+You can optionally specify in_memory to force the set to not be persisted to disk. If both precision and
+eps are specified, it is not specified which one will be used. Generally, only one should be provided,
+as the other will be computed.
 
 As an example::
 
