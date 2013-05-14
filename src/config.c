@@ -48,6 +48,22 @@ static int value_to_int(const char *val, int *result) {
 }
 
 /**
+ * Attempts to convert a string to an integer (64bit),
+ * and write the value out.
+ * @arg val The string value
+ * @arg result The destination for the result
+ * @return 0 on success, 0 on error.
+ */
+static int value_to_int64(const char *val, uint64_t *result) {
+    long long res = strtoll(val, NULL, 10);
+    if (res == 0 && errno == EINVAL) {
+        return 0;
+    }
+    *result = res;
+    return 1;
+}
+
+/**
  * Attempts to convert a string to a double,
  * and write the value out.
  * @arg val The string value
@@ -376,6 +392,10 @@ static int set_config_callback(void* user, const char* section, const char* name
     } else if (NAME_MATCH("default_precision")) {
          return value_to_int(value, &config->default_precision);
 
+    // Handle big int
+    } else if (NAME_MATCH("size")) {
+         return value_to_int64(value, &config->size);
+
     // Handle the double cases
     } else if (NAME_MATCH("default_eps")) {
          return value_to_double(value, &config->default_eps);
@@ -425,9 +445,11 @@ int update_filename_from_set_config(char *filename, hlld_set_config *config) {
 
     // Write out
     fprintf(f, "[hlld]\n\
+size = %llu\n\
 default_eps = %f\n\
 default_precision = %d\n\
-in_memory = %d\n", config->default_eps,
+in_memory = %d\n", (unsigned long long)config->size,
+                 config->default_eps,
                  config->default_precision,
                  config->in_memory
     );

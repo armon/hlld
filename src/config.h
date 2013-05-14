@@ -29,6 +29,7 @@ typedef struct {
     double default_eps;
     int default_precision;
     int in_memory;
+    uint64_t size;
 } hlld_set_config;
 
 

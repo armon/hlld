@@ -260,6 +260,7 @@ START_TEST(test_set_config_bad_file)
     fail_unless(config.default_eps == 0);
     fail_unless(config.default_precision == 0);
     fail_unless(config.in_memory == 0);
+    fail_unless(config.size == 0);
 }
 END_TEST
 
@@ -277,6 +278,7 @@ START_TEST(test_set_config_empty_file)
     fail_unless(config.default_eps == 0);
     fail_unless(config.default_precision == 0);
     fail_unless(config.in_memory == 0);
+    fail_unless(config.size == 0);
 
     unlink("/tmp/zero_file");
 }
@@ -286,6 +288,7 @@ START_TEST(test_set_config_basic_config)
 {
     int fh = open("/tmp/set_basic_config", O_CREAT|O_RDWR, 0777);
     char *buf = "[hlld]\n\
+size = 1024\n\
 in_memory = 1\n\
 default_eps = 0.02\n\
 default_precision = 12\n";
@@ -299,6 +302,7 @@ default_precision = 12\n";
     fail_unless(res == 0);
 
     // Should get the config
+    fail_unless(config.size == 1024);
     fail_unless(config.default_eps == 0.02);
     fail_unless(config.default_precision == 12);
     fail_unless(config.in_memory == 1);
@@ -313,6 +317,7 @@ START_TEST(test_update_filename_from_set_config)
     config.default_eps = 0.02;
     config.default_precision = 12;
     config.in_memory = 1;
+    config.size = 4096;
 
     int res = update_filename_from_set_config("/tmp/update_filter", &config);
     chmod("/tmp/update_filter", 777);
@@ -327,6 +332,7 @@ START_TEST(test_update_filename_from_set_config)
     fail_unless(config2.default_eps == 0.02);
     fail_unless(config2.default_precision == 12);
     fail_unless(config2.in_memory == 1);
+    fail_unless(config2.size == 4096);
 
     unlink("/tmp/update_filter");
 }
