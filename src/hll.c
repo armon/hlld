@@ -49,6 +49,7 @@ int hll_init(unsigned char precision, hll_t *h) {
     int words = INT_CEIL(reg, REG_PER_WORD);
 
     // Allocate and zero out the registers
+    h->bm = NULL;
     h->registers = calloc(words, sizeof(uint32_t));
     if (!h->registers) return -1;
     return 0;
@@ -56,11 +57,48 @@ int hll_init(unsigned char precision, hll_t *h) {
 
 
 /**
- * Destroys an hll
+ * Initializes a new HLL from a bitmap
+ * @arg precision The digits of precision to use
+ * @arg bm The bitmap to use
+ * @arg h The HLL to initialize
+ * @return 0 on success
+ */
+int hll_init_from_bitmap(unsigned char precision, hlld_bitmap *bm, hll_t *h) {
+    // Ensure the precision is somewhat sane
+    if (precision < HLL_MIN_PRECISION || precision > HLL_MAX_PRECISION)
+        return -1;
+
+    // Check the bitmap size
+    if (hll_bytes_for_precision(precision) != bm->size)
+        return -1;
+
+    // Store precision
+    h->precision = precision;
+
+    // Use the bitmap
+    h->registers = (uint32_t*)bm->mmap;
+    h->bm = bm;
+    return 0;
+}
+
+
+/**
+ * Destroys an hll. Closes the bitmap, but does not free it.
  * @return 0 on success
  */
 int hll_destroy(hll_t *h) {
-    free(h->registers);
+    // Close the bitmap
+    if (h->bm) {
+        bitmap_close(h->bm);
+        h->bm = NULL;
+        h->registers = NULL;
+
+    // Destroy the registers if we allocated them
+    } else if (h->registers) {
+        free(h->registers);
+        h->registers = NULL;
+    }
+
     return 0;
 }
 

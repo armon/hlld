@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include "bitmap.h"
 
 #ifndef HLL_H
 #define HLL_H
@@ -10,6 +11,7 @@
 typedef struct {
     unsigned char precision;
     uint32_t *registers;
+    hlld_bitmap *bm;
 } hll_t;
 
 /**
@@ -21,7 +23,16 @@ typedef struct {
 int hll_init(unsigned char precision, hll_t *h);
 
 /**
- * Destroys an hll
+ * Initializes a new HLL from a bitmap
+ * @arg precision The digits of precision to use
+ * @arg bm The bitmap to use
+ * @arg h The HLL to initialize
+ * @return 0 on success
+ */
+int hll_init_from_bitmap(unsigned char precision, hlld_bitmap *bm, hll_t *h);
+
+/**
+ * Destroys an hll. Closes the bitmap, but does not free it.
  * @return 0 on success
  */
 int hll_destroy(hll_t *h);

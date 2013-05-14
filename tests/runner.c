@@ -75,6 +75,7 @@ int main(void)
     tcase_add_test(tc4, test_hll_add);
     tcase_add_test(tc4, test_hll_add_hash);
     tcase_add_test(tc4, test_hll_add_size);
+    tcase_add_test(tc4, test_hll_add_size_bitmap);
     tcase_add_test(tc4, test_hll_size);
     tcase_add_test(tc4, test_hll_error_bound);
     tcase_add_test(tc4, test_hll_precision_for_error);

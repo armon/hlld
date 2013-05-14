@@ -77,6 +77,28 @@ START_TEST(test_hll_add_size)
 }
 END_TEST
 
+START_TEST(test_hll_add_size_bitmap)
+{
+    hlld_bitmap bm;
+    uint64_t bytes = hll_bytes_for_precision(10);
+    fail_unless(bitmap_from_file(-1, bytes, ANONYMOUS, &bm) == 0);
+
+    hll_t h;
+    fail_unless(hll_init_from_bitmap(10, &bm, &h) == 0);
+
+    char buf[100];
+    for (int i=0; i < 100; i++) {
+        fail_unless(sprintf((char*)&buf, "test%d", i));
+        hll_add(&h, (char*)&buf);
+    }
+
+    double s = hll_size(&h);
+    fail_unless(s > 95 && s < 105);
+
+    fail_unless(hll_destroy(&h) == 0);
+}
+END_TEST
+
 START_TEST(test_hll_size)
 {
     hll_t h;
