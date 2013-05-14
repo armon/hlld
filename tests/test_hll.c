@@ -51,7 +51,6 @@ START_TEST(test_hll_add_hash)
     hll_t h;
     fail_unless(hll_init(10, &h) == 0);
 
-    char buf[100];
     for (uint64_t i=0; i < 100; i++) {
         hll_add_hash(&h, i ^ rand());
     }
