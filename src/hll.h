@@ -56,4 +56,13 @@ double hll_size(hll_t *h);
  */
 int hll_precision_for_error(double err);
 
+/**
+ * Computes the upper bound on variance given
+ * a precision
+ * @arg prec The precision to use
+ * @return The expected variance in the count,
+ * or zero on error.
+ */
+double hll_error_for_precision(int prec);
+
 #endif

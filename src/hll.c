@@ -269,3 +269,22 @@ int hll_precision_for_error(double err) {
     return ceil(p);
 }
 
+/**
+ * Computes the upper bound on variance given
+ * a precision
+ * @arg prec The precision to use
+ * @return The expected variance in the count,
+ * or zero on error.
+ */
+double hll_error_for_precision(int prec) {
+    // Check that the error bound is sane
+    if (prec < HLL_MIN_PRECISION || prec > HLL_MAX_PRECISION)
+        return 0;
+
+    /*
+     * Error of HLL is 1.04 / sqrt(m)
+     * m is given by 2^p
+     */
+    int registers = pow(2, prec);
+    return 1.04 / sqrt(registers);
+}

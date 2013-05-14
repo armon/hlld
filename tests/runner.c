@@ -78,6 +78,7 @@ int main(void)
     tcase_add_test(tc4, test_hll_size);
     tcase_add_test(tc4, test_hll_error_bound);
     tcase_add_test(tc4, test_hll_precision_for_error);
+    tcase_add_test(tc4, test_hll_error_for_precision);
 
     srunner_run_all(sr, CK_ENV);
     nf = srunner_ntests_failed(sr);
