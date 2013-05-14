@@ -320,14 +320,14 @@ uint64_t hset_byte_size(hlld_set *set) {
  */
 static int thread_safe_fault(hlld_set *s) {
     // Acquire lock
+    int res = 0;
     pthread_mutex_lock(&s->hll_lock);
 
     // Bail if we already faulted in
-    if (s->is_proxied)
+    if (!s->is_proxied)
         goto LEAVE;
 
     // Determine the expected size
-    int res = 0;
     uint64_t size = hll_bytes_for_precision(s->set_config.default_precision);
 
     // Get the mode for our bitmap
@@ -388,6 +388,8 @@ CREATE_HLL:
     // Disable proxied
     if (!res)
         s->is_proxied = 0;
+    else
+        syslog(LOG_ERR, "Failed to create HLL! Res: %d", res);
 
 LEAVE:
     // Release lock

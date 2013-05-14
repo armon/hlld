@@ -5,16 +5,18 @@
 #include "test_hashmap.c"
 #include "test_hll.c"
 #include "test_bitmap.c"
+#include "test_set.c"
 
 int main(void)
 {
     setlogmask(LOG_UPTO(LOG_DEBUG));
 
-    Suite *s1 = suite_create("Hlld");
+    Suite *s1 = suite_create("hlld");
     TCase *tc1 = tcase_create("config");
     TCase *tc2 = tcase_create("hashmap");
     TCase *tc3 = tcase_create("bitmap");
     TCase *tc4 = tcase_create("hll");
+    TCase *tc5 = tcase_create("set");
     SRunner *sr = srunner_create(s1);
     int nf;
 
@@ -56,7 +58,7 @@ int main(void)
     tcase_add_test(tc2, test_map_put_iter_break);
     tcase_add_test(tc2, test_map_put_grow);
 
-    // Add the filter tests
+    // Add the bitmap tests
     suite_add_tcase(s1, tc3);
     tcase_set_timeout(tc3, 3);
     tcase_add_test(tc2, make_anonymous_bitmap);
@@ -68,7 +70,7 @@ int main(void)
     tcase_add_test(tc2, make_bitmap_nofile_create);
     tcase_add_test(tc2, make_bitmap_nofile_create_persistent);
 
-    // Add the filter tests
+    // Add the hll tests
     suite_add_tcase(s1, tc4);
     tcase_add_test(tc4, test_hll_init_bad);
     tcase_add_test(tc4, test_hll_init_and_destroy);
@@ -81,6 +83,19 @@ int main(void)
     tcase_add_test(tc4, test_hll_precision_for_error);
     tcase_add_test(tc4, test_hll_error_for_precision);
     tcase_add_test(tc4, test_hll_bytes_for_precision);
+
+    // Add the set tests
+    suite_add_tcase(s1, tc5);
+    tcase_set_timeout(tc5, 3);
+    tcase_add_test(tc5, test_set_init_destroy);
+    tcase_add_test(tc5, test_set_init_discover_destroy);
+    tcase_add_test(tc5, test_set_init_discover_delete);
+    tcase_add_test(tc5, test_set_init_proxied);
+    tcase_add_test(tc5, test_set_add);
+    tcase_add_test(tc5, test_set_restore);
+    tcase_add_test(tc5, test_set_flush);
+    tcase_add_test(tc5, test_set_add_in_mem);
+    tcase_add_test(tc5, test_set_page_out);
 
     srunner_run_all(sr, CK_ENV);
     nf = srunner_ntests_failed(sr);
