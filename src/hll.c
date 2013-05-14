@@ -22,6 +22,7 @@ State of The Art Cardinality Estimation Algorithm"
 #define REG_PER_WORD 5  // floor(INT_WIDTH / REG_WIDTH)
 
 #define NUM_REG(precision) ((1 << precision))
+#define INT_CEIL(num, denom) (((num) + (denom) - 1) / (denom))
 
 // Link the external murmur hash in
 extern void MurmurHash3_x64_128(const void * key, const int len, const uint32_t seed, void *out);
@@ -45,7 +46,7 @@ int hll_init(unsigned char precision, hll_t *h) {
     int reg = NUM_REG(precision);
 
     // Get the full words required
-    int words = ceil(reg / (double)REG_PER_WORD);
+    int words = INT_CEIL(reg, REG_PER_WORD);
 
     // Allocate and zero out the registers
     h->registers = calloc(words, sizeof(uint32_t));
