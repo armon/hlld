@@ -165,7 +165,6 @@ START_TEST(test_set_restore)
     hlld_set *set = NULL;
     res = init_set(&config, "test_set5", 0, &set);
     fail_unless(res == 0);
-    set_counters *counters = hset_counters(set);
 
     // Check all the keys get added
     char buf[100];
@@ -222,7 +221,6 @@ START_TEST(test_set_flush)
     hlld_set *set2 = NULL;
     res = init_set(&config, "test_set6", 1, &set2);
     fail_unless(res == 0);
-    set_counters *counters2 = hset_counters(set2);
 
     // Re-check
     fail_unless(hset_size(set2) == hset_size(set));
