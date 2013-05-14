@@ -184,7 +184,6 @@ START_TEST(test_set_restore)
     // Remake the set
     res = init_set(&config, "test_set5", 1, &set);
     fail_unless(res == 0);
-    counters = hset_counters(set);
 
     // Re-check
     fail_unless(hset_size(set) == size);
