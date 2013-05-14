@@ -130,3 +130,13 @@ START_TEST(test_hll_error_for_precision)
 }
 END_TEST
 
+START_TEST(test_hll_bytes_for_precision)
+{
+    fail_unless(hll_bytes_for_precision(3) == 0);
+    fail_unless(hll_bytes_for_precision(20) == 0);
+    fail_unless(hll_bytes_for_precision(12) == 3280);
+    fail_unless(hll_bytes_for_precision(10) == 820);
+    fail_unless(hll_bytes_for_precision(16) == 52432);
+}
+END_TEST
+

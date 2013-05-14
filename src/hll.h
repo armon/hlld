@@ -65,4 +65,12 @@ int hll_precision_for_error(double err);
  */
 double hll_error_for_precision(int prec);
 
+/**
+ * Computes the bytes required for a HLL of the
+ * given precision.
+ * @arg prec The precision to use
+ * @return The bytes required or 0 on error.
+ */
+uint64_t hll_bytes_for_precision(int prec);
+
 #endif

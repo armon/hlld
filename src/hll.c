@@ -288,3 +288,25 @@ double hll_error_for_precision(int prec) {
     int registers = pow(2, prec);
     return 1.04 / sqrt(registers);
 }
+
+/**
+ * Computes the bytes required for a HLL of the
+ * given precision.
+ * @arg prec The precision to use
+ * @return The bytes required or 0 on error.
+ */
+uint64_t hll_bytes_for_precision(int prec) {
+    // Check that the error bound is sane
+    if (prec < HLL_MIN_PRECISION || prec > HLL_MAX_PRECISION)
+        return 0;
+
+    // Determine how many registers are needed
+    int reg = NUM_REG(prec);
+
+    // Get the full words required
+    int words = INT_CEIL(reg, REG_PER_WORD);
+
+    // Convert to byte size
+    return words * sizeof(uint32_t);
+}
+
