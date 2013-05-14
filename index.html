@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <link href='https://fonts.googleapis.com/css?family=Chivo:900' rel='stylesheet' type='text/css'>
+    <link rel="stylesheet" type="text/css" href="stylesheets/stylesheet.css" media="screen" />
+    <link rel="stylesheet" type="text/css" href="stylesheets/pygment_trac.css" media="screen" />
+    <link rel="stylesheet" type="text/css" href="stylesheets/print.css" media="print" />
+    <!--[if lt IE 9]>
+    <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <title>hlld by armon</title>
+  </head>
+
+  <body>
+    <div id="container">
+      <div class="inner">
+
+        <header>
+          <h1>hlld</h1>
+          <h2>A high performance C server for HyperLogLogs</h2>
+        </header>
+
+        <section id="downloads" class="clearfix">
+          <a href="https://github.com/armon/hlld/zipball/master" id="download-zip" class="button"><span>Download .zip</span></a>
+          <a href="https://github.com/armon/hlld/tarball/master" id="download-tar-gz" class="button"><span>Download .tar.gz</span></a>
+          <a href="https://github.com/armon/hlld" id="view-on-github" class="button"><span>View on GitHub</span></a>
+        </section>
+
+        <hr>
+
+        <section id="main_content">
+          <h1>hlld <a href="https://travis-ci.org/armon/hlld"><img src="https://travis-ci.org/armon/hlld.png?branch=master" alt="Build Status"></a>
+</h1>
+
+<p>hlld is a high-performance C server which is used
+to expose HyperLogLog sets and operations over them to
+networked clients. It uses a simple ASCI protocol
+which is human readable, and similar to memcached.</p>
+
+<h2>Features</h2>
+
+<ul>
+<li>Scalable non-blocking core allows for many connected
+clients and concurrent operations</li>
+<li>Implements 6bit wide HyperLogLogs, allowing almost unbounded counts</li>
+<li>Supports asynchronous flushes to disk for persistence</li>
+<li>Supports non-disk backed sets for high I/O</li>
+<li>Automatically faults cold sets out of memory to save resources</li>
+<li>Dead simple to start and administer</li>
+<li>FAST, FAST, FAST</li>
+</ul><h2>Install</h2>
+
+<p>Download and build from source::</p>
+
+<pre><code>$ git clone https://armon@github.com/armon/hlld.git
+$ cd hlld
+$ pip install SCons  # Uses the Scons build system, may not be necessary
+$ scons
+$ ./hlld
+</code></pre>
+
+<p>This will generate some errors related to building the test code
+as it depends on libcheck. To build the test code successfully,
+do the following::</p>
+
+<pre><code>$ cd deps/check-0.9.8/
+$ ./configure
+$ make
+# make install
+# ldconfig (necessary on some Linux distros)
+</code></pre>
+
+<p>Then re-build hlld. At this point, the test code should build
+successfully.</p>
+
+<h2>Usage</h2>
+
+<p>hlld can be configured using a file which is in INI format.
+Here is an example configuration file:</p>
+
+<p>::</p>
+
+<pre><code># Settings for hlld
+[hlld]
+tcp_port = 4553
+udp_port = 4554
+data_dir = /mnt/hlld
+log_level = INFO
+cold_interval = 3600
+flush_interval = 60
+default_eps = 0.02
+workers = 2
+</code></pre>
+
+<p>Then run hlld, pointing it to that file::</p>
+
+<pre><code>hlld -f /etc/hlld.conf
+</code></pre>
+
+<h2>Protocol</h2>
+
+<p>By default, hlld will listen for TCP connections on port 4553.
+It uses a simple ASCII protocol that is very similar to memcached.</p>
+
+<p>A command has the following syntax::</p>
+
+<pre><code>cmd [args][\r]\n
+</code></pre>
+
+<p>We start each line by specifying a command, providing optional arguments,
+and ending the line in a newline (carriage return is optional).</p>
+
+<p>There are a total of 9 commands:</p>
+
+<ul>
+<li>create - Create a new set (a set is a named HyperLogLog)</li>
+<li>list - List all sets</li>
+<li>drop - Drop a set (Deletes from disk)</li>
+<li>close - Closes a set (Unmaps from memory, but still accessible)</li>
+<li>clear - Clears a set from the lists (Removes memory, left on disk)</li>
+<li>set|s - Set an item in a set</li>
+<li>bulk|b - Set many items in a set at once</li>
+<li>info - Gets info about a set</li>
+<li>flush - Flushes all sets or just a specified one</li>
+</ul><p>For the <code>create</code> command, the format is::</p>
+
+<pre><code>create set_name [precision=prec] [eps=max_eps] [in_memory=0|1]
+</code></pre>
+
+<p>Where <code>set_name</code> is the name of the set,
+and can contain the characters a-z, A-Z, 0-9, ., _.
+If a precision is provided the set
+will be created with the given bits of precision, otherwise the configured default value will be used.
+If a maximum epsilon is provided, that will be used to compute a precision, otherwise the configured default is used.
+You can optionally specify in_memory to force the set to not be persisted to disk. If both precision and
+eps are specified, it is not specified which one will be used. Generally, only one should be provided,
+as the other will be computed.</p>
+
+<p>As an example::</p>
+
+<pre><code>create foobar eps=0.01
+</code></pre>
+
+<p>This will create a set foobar that has a maximum variance of 1%.
+Valid responses are either "Done", "Exists", or "Delete in progress". The last response
+occurs if a set of the same name was recently deleted, and hlld
+has not yet completed the delete operation. If so, a client should
+retry the create in a few seconds.</p>
+
+<p>The <code>list</code> command takes no arguments, and returns information
+about all the sets. Here is an example response::</p>
+
+<pre><code>START
+foobar 0.02 12 4096 1540
+END
+</code></pre>
+
+<p>This indicates a single set named foobar, with a variance
+of 0.02, precision 12, a 4096 byte size, a current size estimate of 1540
+items.</p>
+
+<p>The <code>drop</code>, <code>close</code> and <code>clear</code> commands are like create, but only takes a set name.
+It can either return "Done" or "Set does not exist". <code>clear</code> can also return "Set is not proxied. Close it first.".
+This means that the set is still in-memory and not qualified for being cleared.
+This can be resolved by first closing the set.</p>
+
+<p>set is a very simple command::</p>
+
+<pre><code>set set_name key
+</code></pre>
+
+<p>The command must specify a set and a key to use.
+It will either return "Done", or "Set does not exist".</p>
+
+<p>The bulk command is similar to set but allows for many keys
+to be set at once. Keys must be separated by a space::</p>
+
+<pre><code>bulk set_name key1 [key_2 [key_3 [key_N]]]
+</code></pre>
+
+<p>The bulk and set commands can also be called by their aliasses
+b and s respectively.</p>
+
+<p>The <code>info</code> command takes a set name, and returns
+information about the set. Here is an example output::</p>
+
+<pre><code>START
+page_ins 0
+page_outs 0
+eps 0.02
+precision 12
+sets 0
+size 1540
+storage 4096
+END
+</code></pre>
+
+<p>The command may also return "Set does not exist" if the set does
+not exist.</p>
+
+<p>The <code>flush</code> command may be called without any arguments, which
+causes all sets to be flushed. If a set name is provided
+then that set will be flushed. This will either return "Done" or
+"Set does not exist".</p>
+
+<h2>Example</h2>
+
+<p>Here is an example of a client flow, assuming hlld is
+running on the default port using just telnet::</p>
+
+<pre><code>$ telnet localhost 4553
+&gt; list
+START
+END
+
+&gt; create foobar
+Done
+
+&gt; set foobar zipzab
+Done
+
+&gt; bulk foobar zipzab blah boo
+Done
+
+&gt; list
+START
+foobar 0.02 12 4096 3
+END
+
+&gt; drop foobar
+Done
+
+&gt; list
+START
+END
+</code></pre>
+
+<h2>Clients</h2>
+
+<p>Here is a list of known client implementations:</p>
+
+<ul>
+<li>WIP...</li>
+</ul><p>Here is a list of "best-practices" for client implementations:</p>
+
+<ul>
+<li>Maintain a set of open connections to the server to minimize connection time</li>
+<li>Make use of the bulk operations when possible, as they are more efficient.</li>
+<li>For long keys, it is better to do a client-side hash (SHA1 at least), and send
+the hash as the key to minimize network traffic.</li>
+</ul><h2>References</h2>
+
+<p>Here are some related works which we make use of:</p>
+
+<ul>
+<li>HyperLogLog in Practice: Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm : <a href="http://research.google.com/pubs/pub40671.html">http://research.google.com/pubs/pub40671.html</a>
+</li>
+<li>HyperLogLog: The analysis of a near-optimal cardinality estimation algorithm : <a href="http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.142.9475">http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.142.9475</a>
+</li>
+</ul>
+        </section>
+
+        <footer>
+          hlld is maintained by <a href="https://github.com/armon">armon</a><br>
+          This page was generated by <a href="http://pages.github.com">GitHub Pages</a>. Tactile theme by <a href="http://twitter.com/jasonlong">Jason Long</a>.
+        </footer>
+
+        
+      </div>
+    </div>
+  </body>
+</html>
