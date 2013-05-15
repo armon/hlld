@@ -17,7 +17,7 @@ typedef struct hashmap_entry {
     struct hashmap_entry *next; // Support linking.
 } hashmap_entry;
 
-struct bloom_hashmap {
+struct hashmap {
     int count;      // Number of entries
     int table_size; // Size of table in nodes
     int max_size;   // Max size before we resize
@@ -56,7 +56,7 @@ static int hashmap_get_random(uint32_t *random_out) {
  * @arg map Output. Set to the address of the map
  * @return 0 on success.
  */
-int hashmap_init(int initial_size, bloom_hashmap **map) {
+int hashmap_init(int initial_size, hashmap **map) {
     int rc;
     uint32_t random_seed;
 
@@ -85,7 +85,7 @@ int hashmap_init(int initial_size, bloom_hashmap **map) {
         return -1;
 
     // Allocate the map
-    bloom_hashmap *m = calloc(1, sizeof(bloom_hashmap));
+    hashmap *m = calloc(1, sizeof(hashmap));
     m->table_size = initial_size;
     m->max_size = MAX_CAPACITY * initial_size;
     m->seed = random_seed;
@@ -102,7 +102,7 @@ int hashmap_init(int initial_size, bloom_hashmap **map) {
  * Destroys a map and cleans up all associated memory
  * @arg map The hashmap to destroy. Frees memory.
  */
-int hashmap_destroy(bloom_hashmap *map) {
+int hashmap_destroy(hashmap *map) {
     // Free each entry
     hashmap_entry *entry, *old;
     int in_table;
@@ -135,7 +135,7 @@ int hashmap_destroy(bloom_hashmap *map) {
 /**
  * Returns the size of the hashmap in items
  */
-int hashmap_size(bloom_hashmap *map) {
+int hashmap_size(hashmap *map) {
     return map->count;
 }
 
@@ -146,7 +146,7 @@ int hashmap_size(bloom_hashmap *map) {
  * @arg value Output. Set to the value of th key.
  * 0 on success. -1 if not found.
  */
-int hashmap_get(bloom_hashmap *map, char *key, void **value) {
+int hashmap_get(hashmap *map, char *key, void **value) {
     // Compute the hash value of the key
     uint64_t out[2];
     MurmurHash3_x64_128(key, strlen(key), map->seed, &out);
@@ -233,7 +233,7 @@ static int hashmap_insert_table(hashmap_entry *table, int table_size, char *key,
 /**
  * Internal method to double the size of a hashmap
  */
-static void hashmap_double_size(bloom_hashmap *map) {
+static void hashmap_double_size(hashmap *map) {
     // Calculate the new sizes
     int new_size = map->table_size * 2;
     int new_max_size = map->max_size * 2;
@@ -285,7 +285,7 @@ static void hashmap_double_size(bloom_hashmap *map) {
  * @arg value The value to set.
  * 0 if updated, 1 if added.
  */
-int hashmap_put(bloom_hashmap *map, char *key, void *value) {
+int hashmap_put(hashmap *map, char *key, void *value) {
     // Check if we need to double the size
     if (map->count + 1 > map->max_size) {
         // Doubles the size of the hashmap, re-try the insert
@@ -307,7 +307,7 @@ int hashmap_put(bloom_hashmap *map, char *key, void *value) {
  * @arg key The key to delete
  * 0 on success. -1 if not found.
  */
-int hashmap_delete(bloom_hashmap *map, char *key) {
+int hashmap_delete(hashmap *map, char *key) {
     // Compute the hash value of the key
     uint64_t out[2];
     MurmurHash3_x64_128(key, strlen(key), map->seed, &out);
@@ -366,7 +366,7 @@ int hashmap_delete(bloom_hashmap *map, char *key) {
  * @notes This method is not thread safe.
  * 0 on success. -1 if not found.
  */
-int hashmap_clear(bloom_hashmap *map) {
+int hashmap_clear(hashmap *map) {
     hashmap_entry *entry, *old;
     int in_table;
     for (int i=0; i < map->table_size; i++) {
@@ -406,7 +406,7 @@ int hashmap_clear(bloom_hashmap *map) {
  * @arg data Opaque handle passed to the callback
  * @return 0 on success
  */
-int hashmap_iter(bloom_hashmap *map, hashmap_callback cb, void *data) {
+int hashmap_iter(hashmap *map, hashmap_callback cb, void *data) {
     hashmap_entry *entry;
     int should_break = 0;
     for (int i=0; i < map->table_size && !should_break; i++) {

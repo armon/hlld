@@ -10,7 +10,7 @@
 
 START_TEST(test_map_init_and_destroy)
 {
-    bloom_hashmap *map;
+    hashmap *map;
     int res = hashmap_init(0, &map);
     fail_unless(res == 0);
     res = hashmap_destroy(map);
@@ -20,7 +20,7 @@ END_TEST
 
 START_TEST(test_map_get_no_keys)
 {
-    bloom_hashmap *map;
+    hashmap *map;
     int res = hashmap_init(0, &map);
     fail_unless(res == 0);
 
@@ -40,7 +40,7 @@ END_TEST
 
 START_TEST(test_map_put)
 {
-    bloom_hashmap *map;
+    hashmap *map;
     int res = hashmap_init(0, &map);
     fail_unless(res == 0);
     fail_unless(hashmap_size(map) == 0);
@@ -59,7 +59,7 @@ END_TEST
 
 START_TEST(test_map_put_get)
 {
-    bloom_hashmap *map;
+    hashmap *map;
     int res = hashmap_init(0, &map);
     fail_unless(res == 0);
 
@@ -84,7 +84,7 @@ END_TEST
 
 START_TEST(test_map_delete_no_keys)
 {
-    bloom_hashmap *map;
+    hashmap *map;
     int res = hashmap_init(0, &map);
     fail_unless(res == 0);
     fail_unless(hashmap_size(map) == 0);
@@ -102,7 +102,7 @@ END_TEST
 
 START_TEST(test_map_put_delete)
 {
-    bloom_hashmap *map;
+    hashmap *map;
     int res = hashmap_init(0, &map);
     fail_unless(res == 0);
 
@@ -129,7 +129,7 @@ END_TEST
 
 START_TEST(test_map_put_delete_get)
 {
-    bloom_hashmap *map;
+    hashmap *map;
     int res = hashmap_init(0, &map);
     fail_unless(res == 0);
 
@@ -158,7 +158,7 @@ END_TEST
 
 START_TEST(test_map_clear_no_keys)
 {
-    bloom_hashmap *map;
+    hashmap *map;
     int res = hashmap_init(0, &map);
     fail_unless(res == 0);
 
@@ -171,7 +171,7 @@ END_TEST
 
 START_TEST(test_map_put_clear_get)
 {
-    bloom_hashmap *map;
+    hashmap *map;
     int res = hashmap_init(0, &map);
     fail_unless(res == 0);
 
@@ -209,7 +209,7 @@ int iter_test(void *data, const char *key, void *value) {
 
 START_TEST(test_map_iter_no_keys)
 {
-    bloom_hashmap *map;
+    hashmap *map;
     int res = hashmap_init(0, &map);
     fail_unless(res == 0);
 
@@ -224,7 +224,7 @@ END_TEST
 
 START_TEST(test_map_put_iter)
 {
-    bloom_hashmap *map;
+    hashmap *map;
     int res = hashmap_init(0, &map);
     fail_unless(res == 0);
 
@@ -255,7 +255,7 @@ int iter_break_test(void *data, const char *key, void *value) {
 
 START_TEST(test_map_put_iter_break)
 {
-    bloom_hashmap *map;
+    hashmap *map;
     int res = hashmap_init(0, &map);
     fail_unless(res == 0);
 
@@ -276,7 +276,7 @@ END_TEST
 
 START_TEST(test_map_put_grow)
 {
-    bloom_hashmap *map;
+    hashmap *map;
     int res = hashmap_init(32, &map);  // Only 32 slots
     fail_unless(res == 0);
 
