@@ -17,7 +17,8 @@ objs =  env_with_err.Object('src/config', 'src/config.c') + \
         env_with_err.Object('src/hll', 'src/hll.c') + \
         env_with_err.Object('src/hll_constants', 'src/hll_constants.c') + \
         env_with_err.Object('src/bitmap', 'src/bitmap.c') + \
-        env_with_err.Object('src/set', 'src/set.c')
+        env_with_err.Object('src/set', 'src/set.c') + \
+        env_with_err.Object('src/set_manager', 'src/set_manager.c')
 
 libs = ["pthread", murmur, inih, "m", "crypto"]
 if plat == 'Linux':
