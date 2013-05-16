@@ -52,7 +52,7 @@ clients and concurrent operations</li>
 <li>FAST, FAST, FAST</li>
 </ul><h2>Install</h2>
 
-<p>Download and build from source::</p>
+<p>Download and build from source:</p>
 
 <pre><code>$ git clone https://armon@github.com/armon/hlld.git
 $ cd hlld
@@ -63,7 +63,7 @@ $ ./hlld
 
 <p>This will generate some errors related to building the test code
 as it depends on libcheck. To build the test code successfully,
-do the following::</p>
+do the following:</p>
 
 <pre><code>$ cd deps/check-0.9.8/
 $ ./configure
@@ -80,8 +80,6 @@ successfully.</p>
 <p>hlld can be configured using a file which is in INI format.
 Here is an example configuration file:</p>
 
-<p>::</p>
-
 <pre><code># Settings for hlld
 [hlld]
 tcp_port = 4553
@@ -94,7 +92,7 @@ default_eps = 0.02
 workers = 2
 </code></pre>
 
-<p>Then run hlld, pointing it to that file::</p>
+<p>Then run hlld, pointing it to that file:</p>
 
 <pre><code>hlld -f /etc/hlld.conf
 </code></pre>
@@ -153,7 +151,7 @@ retry the create in a few seconds.</p>
 about all the sets. Here is an example response::</p>
 
 <pre><code>START
-foobar 0.02 12 4096 1540
+foobar 0.010000 14 13108 0
 END
 </code></pre>
 
@@ -166,7 +164,7 @@ It can either return "Done" or "Set does not exist". <code>clear</code> can also
 This means that the set is still in-memory and not qualified for being cleared.
 This can be resolved by first closing the set.</p>
 
-<p>set is a very simple command::</p>
+<p>set is a very simple command:</p>
 
 <pre><code>set set_name key
 </code></pre>
@@ -175,7 +173,7 @@ This can be resolved by first closing the set.</p>
 It will either return "Done", or "Set does not exist".</p>
 
 <p>The bulk command is similar to set but allows for many keys
-to be set at once. Keys must be separated by a space::</p>
+to be set at once. Keys must be separated by a space:</p>
 
 <pre><code>bulk set_name key1 [key_2 [key_3 [key_N]]]
 </code></pre>
@@ -184,16 +182,17 @@ to be set at once. Keys must be separated by a space::</p>
 b and s respectively.</p>
 
 <p>The <code>info</code> command takes a set name, and returns
-information about the set. Here is an example output::</p>
+information about the set. Here is an example output:</p>
 
 <pre><code>START
+in_memory 1
 page_ins 0
 page_outs 0
 eps 0.02
 precision 12
 sets 0
 size 1540
-storage 4096
+storage 3280
 END
 </code></pre>
 
@@ -226,7 +225,7 @@ Done
 
 &gt; list
 START
-foobar 0.02 12 4096 3
+foobar 0.016250 12 3280 3
 END
 
 &gt; drop foobar
@@ -250,7 +249,20 @@ END
 <li>Make use of the bulk operations when possible, as they are more efficient.</li>
 <li>For long keys, it is better to do a client-side hash (SHA1 at least), and send
 the hash as the key to minimize network traffic.</li>
-</ul><h2>References</h2>
+</ul><h2>Performance</h2>
+
+<p>Although extensive performance evaluations have not been done,
+casual testing on a 2012 MBP with pure set operations
+allows for a throughput of at least 1MM ops/sec. On Linux,
+response times can be as low as 1 μs.</p>
+
+<p>hlld also supports multi-core systems for scalability, so
+it is important to tune it for the given work load. The number
+of worker threads can be configured either in the configuration
+file, or by providing a <code>-w</code> flag. This should be set to at most
+2 * CPU count. By default, only a single worker is used.</p>
+
+<h2>References</h2>
 
 <p>Here are some related works which we make use of:</p>
 
