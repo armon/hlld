@@ -21,7 +21,7 @@ Features
 Install
 -------
 
-Download and build from source::
+Download and build from source:
 
     $ git clone https://armon@github.com/armon/hlld.git
     $ cd hlld
@@ -31,7 +31,7 @@ Download and build from source::
 
 This will generate some errors related to building the test code
 as it depends on libcheck. To build the test code successfully,
-do the following::
+do the following:
 
     $ cd deps/check-0.9.8/
     $ ./configure
@@ -48,8 +48,6 @@ Usage
 hlld can be configured using a file which is in INI format.
 Here is an example configuration file:
 
-::
-
     # Settings for hlld
     [hlld]
     tcp_port = 4553
@@ -62,7 +60,7 @@ Here is an example configuration file:
     workers = 2
 
 
-Then run hlld, pointing it to that file::
+Then run hlld, pointing it to that file:
 
     hlld -f /etc/hlld.conf
 
@@ -118,7 +116,7 @@ The ``list`` command takes no arguments, and returns information
 about all the sets. Here is an example response::
 
     START
-    foobar 0.02 12 4096 1540
+    foobar 0.010000 14 13108 0
     END
 
 This indicates a single set named foobar, with a variance
@@ -130,7 +128,7 @@ It can either return "Done" or "Set does not exist". ``clear`` can also return "
 This means that the set is still in-memory and not qualified for being cleared.
 This can be resolved by first closing the set.
 
-set is a very simple command::
+set is a very simple command:
 
     set set_name key
 
@@ -138,7 +136,7 @@ The command must specify a set and a key to use.
 It will either return "Done", or "Set does not exist".
 
 The bulk command is similar to set but allows for many keys
-to be set at once. Keys must be separated by a space::
+to be set at once. Keys must be separated by a space:
 
     bulk set_name key1 [key_2 [key_3 [key_N]]]
 
@@ -146,7 +144,7 @@ The bulk and set commands can also be called by their aliasses
 b and s respectively.
 
 The ``info`` command takes a set name, and returns
-information about the set. Here is an example output::
+information about the set. Here is an example output:
 
     START
     in_memory 1
@@ -189,7 +187,7 @@ running on the default port using just telnet::
 
     > list
     START
-    foobar 0.02 12 4096 3
+    foobar 0.016250 12 3280 3
     END
 
     > drop foobar
@@ -213,6 +211,21 @@ Here is a list of "best-practices" for client implementations:
 * Make use of the bulk operations when possible, as they are more efficient.
 * For long keys, it is better to do a client-side hash (SHA1 at least), and send
   the hash as the key to minimize network traffic.
+
+
+Performance
+-----------
+
+Although extensive performance evaluations have not been done,
+casual testing on a 2012 MBP with pure set operations
+allows for a throughput of at least 1MM ops/sec. On Linux,
+response times can be as low as 1 μs.
+
+hlld also supports multi-core systems for scalability, so
+it is important to tune it for the given work load. The number
+of worker threads can be configured either in the configuration
+file, or by providing a `-w` flag. This should be set to at most
+2 * CPU count. By default, only a single worker is used.
 
 
 References
