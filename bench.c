@@ -99,6 +99,9 @@ void *thread_main(void *in) {
     gettimeofday(&end, NULL);
     printf("Set: %d msec. Num: %d\n", timediff(&start_set, &end), sets);
 
+    sprintf((char*)&info.cmd_buf, "drop %s\n", buf);
+    sent = send(info.conn_fd, (char*)&info.cmd_buf, strlen(info.cmd_buf), 0);
+
     return NULL;
 }
 
