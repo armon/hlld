@@ -427,12 +427,14 @@ static void info_set_cb(void *data, char *set_name, hlld_set *set) {
 page_ins %llu\n\
 page_outs %llu\n\
 epsilon %f\n\
+precision %u\n\
 sets %llu\n\
 size %llu\n\
 storage %llu\n",
     ((hset_is_proxied(set)) ? 0 : 1),
     (unsigned long long)counters->page_ins, (unsigned long long)counters->page_outs,
     set->set_config.default_eps,
+    set->set_config.default_precision,
     (unsigned long long)sets,
     (unsigned long long)size,
     (unsigned long long)storage);

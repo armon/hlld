@@ -149,13 +149,14 @@ The ``info`` command takes a set name, and returns
 information about the set. Here is an example output::
 
     START
+    in_memory 1
     page_ins 0
     page_outs 0
     eps 0.02
     precision 12
     sets 0
     size 1540
-    storage 4096
+    storage 3280
     END
 
 The command may also return "Set does not exist" if the set does
