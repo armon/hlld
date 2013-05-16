@@ -22,7 +22,7 @@ static const hlld_config DEFAULT_CONFIG = {
     "/tmp/hlld",        // Tmp data dir, until configured
     "DEBUG",            // DEBUG level
     LOG_DEBUG,
-    0.02,               // Default 2% error.
+    .01625,             // Default 1.625% error == precision 12
     12,                 // Default 12 precision (4096 registers)
     60,                 // Flush once a minute
     3600,               // Cold after an hour
@@ -118,19 +118,15 @@ static int config_callback(void* user, const char* section, const char* name, co
         return value_to_int(value, &config->worker_threads);
     } else if (NAME_MATCH("default_precision")) {
         int res = value_to_int(value, &config->default_precision);
-        if (res) {
-            // Compute error given precision
-            config->default_eps = hll_error_for_precision(config->default_precision);
-        }
+        // Compute error given precision
+        config->default_eps = hll_error_for_precision(config->default_precision);
         return res;
 
         // Handle the double cases
     } else if (NAME_MATCH("default_eps")) {
         int res = value_to_double(value, &config->default_eps);
-        if (res) {
-            // Compute precision given error
-            config->default_precision = hll_precision_for_error(config->default_eps);
-        }
+        // Compute precision given error
+        config->default_precision = hll_precision_for_error(config->default_eps);
         return res;
 
         // Copy the string values
@@ -455,10 +451,10 @@ int update_filename_from_set_config(char *filename, hlld_set_config *config) {
 
     // Write out
     fprintf(f, "[hlld]\n\
-            size = %llu\n\
-            default_eps = %f\n\
-            default_precision = %d\n\
-            in_memory = %d\n", (unsigned long long)config->size,
+size = %llu\n\
+default_eps = %f\n\
+default_precision = %d\n\
+in_memory = %d\n", (unsigned long long)config->size,
             config->default_eps,
             config->default_precision,
             config->in_memory
