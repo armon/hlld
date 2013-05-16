@@ -361,8 +361,8 @@ static void list_set_cb(void *data, char *set_name, hlld_set *set) {
             set_name,
             set->set_config.default_eps,
             set->set_config.default_precision,
-            hset_byte_size(set),
-            hset_size(set));
+            (long long unsigned)hset_byte_size(set),
+            (long long unsigned)hset_size(set));
     assert(res != -1);
 }
 
