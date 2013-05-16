@@ -321,6 +321,7 @@ uint64_t hset_byte_size(hlld_set *set) {
 static int thread_safe_fault(hlld_set *s) {
     // Acquire lock
     int res = 0;
+    char *bitmap_path = NULL;
     pthread_mutex_lock(&s->hll_lock);
 
     // Bail if we already faulted in
@@ -347,7 +348,7 @@ static int thread_safe_fault(hlld_set *s) {
     }
 
     // Get the full path to the bitmap
-    char *bitmap_path = join_path(s->full_path, (char*)DATA_FILE_NAME);
+    bitmap_path = join_path(s->full_path, (char*)DATA_FILE_NAME);
 
     // Check if the register file exists
     struct stat buf;
@@ -394,6 +395,9 @@ CREATE_HLL:
 LEAVE:
     // Release lock
     pthread_mutex_unlock(&s->hll_lock);
+
+    // Free the bitmap path if any
+    if (bitmap_path) free(bitmap_path);
     return res;
 }
 
