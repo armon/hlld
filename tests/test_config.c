@@ -18,7 +18,7 @@ START_TEST(test_config_get_default)
     fail_unless(strcmp(config.data_dir, "/tmp/hlld") == 0);
     fail_unless(strcmp(config.log_level, "DEBUG") == 0);
     fail_unless(config.syslog_log_level == LOG_DEBUG);
-    fail_unless(config.default_eps == 0.02);
+    fail_unless(config.default_eps == 0.01625);
     fail_unless(config.default_precision == 12);
     fail_unless(config.flush_interval == 60);
     fail_unless(config.cold_interval == 3600);
@@ -40,7 +40,7 @@ START_TEST(test_config_bad_file)
     fail_unless(strcmp(config.data_dir, "/tmp/hlld") == 0);
     fail_unless(strcmp(config.log_level, "DEBUG") == 0);
     fail_unless(config.syslog_log_level == LOG_DEBUG);
-    fail_unless(config.default_eps == 0.02);
+    fail_unless(config.default_eps == 0.01625);
     fail_unless(config.default_precision == 12);
     fail_unless(config.flush_interval == 60);
     fail_unless(config.cold_interval == 3600);
@@ -66,7 +66,7 @@ START_TEST(test_config_empty_file)
     fail_unless(strcmp(config.data_dir, "/tmp/hlld") == 0);
     fail_unless(strcmp(config.log_level, "DEBUG") == 0);
     fail_unless(config.syslog_log_level == LOG_DEBUG);
-    fail_unless(config.default_eps == 0.02);
+    fail_unless(config.default_eps == 0.01625);
     fail_unless(config.default_precision == 12);
     fail_unless(config.flush_interval == 60);
     fail_unless(config.cold_interval == 3600);
@@ -88,7 +88,6 @@ flush_interval = 120\n\
 cold_interval = 12000\n\
 in_memory = 1\n\
 default_eps = 0.05\n\
-default_precision = 14\n\
 data_dir = /tmp/test\n\
 workers = 2\n\
 use_mmap = 1\n\
@@ -106,8 +105,8 @@ log_level = INFO\n";
     fail_unless(config.udp_port == 10001);
     fail_unless(strcmp(config.data_dir, "/tmp/test") == 0);
     fail_unless(strcmp(config.log_level, "INFO") == 0);
-    fail_unless(config.default_eps == 0.05);
-    fail_unless(config.default_precision == 14);
+    fail_unless(config.default_eps == 0.05, "EPS %f", config.default_eps);
+    fail_unless(config.default_precision == 9, "PREC %d", config.default_precision);
     fail_unless(config.flush_interval == 120);
     fail_unless(config.cold_interval == 12000);
     fail_unless(config.in_memory == 1);
@@ -117,6 +116,47 @@ log_level = INFO\n";
     unlink("/tmp/basic_config");
 }
 END_TEST
+
+START_TEST(test_config_basic_config_precision)
+{
+    int fh = open("/tmp/basic_config_prec", O_CREAT|O_RDWR, 0777);
+    char *buf = "[hlld]\n\
+port = 10000\n\
+udp_port = 10001\n\
+flush_interval = 120\n\
+cold_interval = 12000\n\
+in_memory = 1\n\
+default_precision = 14\n\
+data_dir = /tmp/test\n\
+workers = 2\n\
+use_mmap = 1\n\
+log_level = INFO\n";
+    write(fh, buf, strlen(buf));
+    fchmod(fh, 777);
+    close(fh);
+
+    hlld_config config;
+    int res = config_from_filename("/tmp/basic_config_prec", &config);
+    fail_unless(res == 0);
+
+    // Should get the config
+    fail_unless(config.tcp_port == 10000);
+    fail_unless(config.udp_port == 10001);
+    fail_unless(strcmp(config.data_dir, "/tmp/test") == 0);
+    fail_unless(strcmp(config.log_level, "INFO") == 0);
+    fail_unless(config.default_precision == 14, "PREC %d", config.default_precision);
+    fail_unless(config.default_eps == .008125, "EPS %f", config.default_eps);
+    fail_unless(config.flush_interval == 120);
+    fail_unless(config.cold_interval == 12000);
+    fail_unless(config.in_memory == 1);
+    fail_unless(config.worker_threads == 2);
+    fail_unless(config.use_mmap == 1);
+
+    unlink("/tmp/basic_config_prec");
+}
+END_TEST
+
+
 
 START_TEST(test_validate_default_config)
 {
@@ -290,7 +330,7 @@ START_TEST(test_set_config_basic_config)
     char *buf = "[hlld]\n\
 size = 1024\n\
 in_memory = 1\n\
-default_eps = 0.02\n\
+default_eps = 0.01625\n\
 default_precision = 12\n";
     write(fh, buf, strlen(buf));
     fchmod(fh, 777);
@@ -303,7 +343,7 @@ default_precision = 12\n";
 
     // Should get the config
     fail_unless(config.size == 1024);
-    fail_unless(config.default_eps == 0.02);
+    fail_unless(config.default_eps == 0.01625);
     fail_unless(config.default_precision == 12);
     fail_unless(config.in_memory == 1);
 
@@ -314,7 +354,7 @@ END_TEST
 START_TEST(test_update_filename_from_set_config)
 {
     hlld_set_config config;
-    config.default_eps = 0.02;
+    config.default_eps = 0.01625;
     config.default_precision = 12;
     config.in_memory = 1;
     config.size = 4096;
@@ -329,7 +369,7 @@ START_TEST(test_update_filename_from_set_config)
     res = set_config_from_filename("/tmp/update_filter", &config2);
     fail_unless(res == 0);
 
-    fail_unless(config2.default_eps == 0.02);
+    fail_unless(config2.default_eps == 0.01625);
     fail_unless(config2.default_precision == 12);
     fail_unless(config2.in_memory == 1);
     fail_unless(config2.size == 4096);
