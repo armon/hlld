@@ -105,7 +105,7 @@ log_level = INFO\n";
     fail_unless(config.udp_port == 10001);
     fail_unless(strcmp(config.data_dir, "/tmp/test") == 0);
     fail_unless(strcmp(config.log_level, "INFO") == 0);
-    fail_unless(config.default_eps == 0.05, "EPS %f", config.default_eps);
+    fail_unless(config.default_eps - 0.045961941 < 0.0001, "EPS %f", config.default_eps);
     fail_unless(config.default_precision == 9, "PREC %d", config.default_precision);
     fail_unless(config.flush_interval == 120);
     fail_unless(config.cold_interval == 12000);

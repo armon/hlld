@@ -256,6 +256,11 @@ static void handle_create_cmd(hlld_conn_handler *handle, char *args, int args_le
             if (sscanf(param, "eps=%lf", &config->default_eps)) {
                 // Compute precision given error
                 config->default_precision = hll_precision_for_error(config->default_eps);
+
+                // Compute error given precision. This is kinda strange but it is done
+                // since its not possible to hit all epsilons perfectly, but we try to get
+                // the eps provided to be the upper bound. This value is the actual eps.
+                config->default_eps = hll_error_for_precision(config->default_precision);
                 match = 1;
             }
             match |= sscanf(param, "in_memory=%d", &config->in_memory);

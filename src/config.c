@@ -118,15 +118,20 @@ static int config_callback(void* user, const char* section, const char* name, co
         return value_to_int(value, &config->worker_threads);
     } else if (NAME_MATCH("default_precision")) {
         int res = value_to_int(value, &config->default_precision);
-        // Compute error given precision
+        // Compute expected error given precision
         config->default_eps = hll_error_for_precision(config->default_precision);
         return res;
 
         // Handle the double cases
     } else if (NAME_MATCH("default_eps")) {
         int res = value_to_double(value, &config->default_eps);
-        // Compute precision given error
+        // Compute required precision given error
         config->default_precision = hll_precision_for_error(config->default_eps);
+
+        // Compute error given precision. This is kinda strange but it is done
+        // since its not possible to hit all epsilons perfectly, but we try to get
+        // the eps provided to be the upper bound. This value is the actual eps.
+        config->default_eps = hll_error_for_precision(config->default_precision);
         return res;
 
         // Copy the string values
