@@ -34,5 +34,8 @@ if plat == "Darwin":
 else:
     test = env_without_unused_err.Program('test_runner', objs + Glob("tests/runner.c"), LIBS=libs + ["check"])
 
+bench_obj = Object("bench", "bench.c", CCFLAGS="-std=c99 -O2")
+Program('bench', bench_obj, LIBS=["pthread"])
+
 # By default, only compile hlld
 Default(hlld)
