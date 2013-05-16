@@ -176,7 +176,7 @@ static void handle_set_multi_cmd(hlld_conn_handler *handle, char *args, int args
 
     // Parse any options
     char *curr_key = key;
-    int res;
+    int res = 0;
     int index = 0;
     while (curr_key && *curr_key != '\0') {
         // Adds a zero terminator to the current key, scans forward
