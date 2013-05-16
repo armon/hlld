@@ -258,13 +258,13 @@ int sane_log_level(char *log_level, int *syslog_level) {
 }
 
 int sane_default_eps(double eps) {
-    if (eps >= 0.3) {
+    if (eps > hll_error_for_precision(HLL_MIN_PRECISION)) {
         syslog(LOG_ERR,
-                "Epsilon cannot be greater than 0.3!");
+                "Epsilon cannot be greater than %f!", hll_error_for_precision(HLL_MIN_PRECISION));
         return 1;
 
-    } else if (eps < 0.0021) {
-        syslog(LOG_ERR, "Epsilon cannot be less than 0.0021!");
+    } else if (eps < hll_error_for_precision(HLL_MAX_PRECISION)) {
+        syslog(LOG_ERR, "Epsilon cannot be less than %f!", hll_error_for_precision(HLL_MAX_PRECISION));
         return 1;
 
     } else if (eps < 0.005) {
