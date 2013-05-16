@@ -6,6 +6,7 @@
 #include "test_hll.c"
 #include "test_bitmap.c"
 #include "test_set.c"
+#include "test_setmgr.c"
 
 int main(void)
 {
@@ -17,6 +18,7 @@ int main(void)
     TCase *tc3 = tcase_create("bitmap");
     TCase *tc4 = tcase_create("hll");
     TCase *tc5 = tcase_create("set");
+    TCase *tc6 = tcase_create("manager");
     SRunner *sr = srunner_create(s1);
     int nf;
 
@@ -96,6 +98,32 @@ int main(void)
     tcase_add_test(tc5, test_set_flush);
     tcase_add_test(tc5, test_set_add_in_mem);
     tcase_add_test(tc5, test_set_page_out);
+
+    // Add the filter tests
+    suite_add_tcase(s1, tc6);
+    tcase_set_timeout(tc6, 3);
+    tcase_add_test(tc6, test_mgr_init_destroy);
+    tcase_add_test(tc6, test_mgr_create_drop);
+    tcase_add_test(tc6, test_mgr_create_double_drop);
+    tcase_add_test(tc6, test_mgr_list);
+    tcase_add_test(tc6, test_mgr_list_no_sets);
+    tcase_add_test(tc6, test_mgr_add_keys);
+    tcase_add_test(tc6, test_mgr_add_no_set);
+    tcase_add_test(tc6, test_mgr_flush_no_set);
+    tcase_add_test(tc6, test_mgr_flush);
+    tcase_add_test(tc6, test_mgr_unmap_no_set);
+    tcase_add_test(tc6, test_mgr_unmap);
+    tcase_add_test(tc6, test_mgr_unmap_add_keys);
+    tcase_add_test(tc6, test_mgr_clear_no_set);
+    tcase_add_test(tc6, test_mgr_clear_not_proxied);
+    tcase_add_test(tc6, test_mgr_clear);
+    tcase_add_test(tc6, test_mgr_clear_reload);
+    tcase_add_test(tc6, test_mgr_list_cold_no_sets);
+    tcase_add_test(tc6, test_mgr_list_cold);
+    tcase_add_test(tc6, test_mgr_unmap_in_mem);
+    tcase_add_test(tc6, test_mgr_create_custom_config);
+    tcase_add_test(tc6, test_mgr_restore);
+    tcase_add_test(tc6, test_mgr_callback);
 
     srunner_run_all(sr, CK_ENV);
     nf = srunner_ntests_failed(sr);
