@@ -3,6 +3,7 @@
 #include <string.h>
 #include <regex.h>
 #include <assert.h>
+#include "hll.h"
 #include "conn_handler.h"
 #include "handler_constants.c"
 
@@ -247,8 +248,16 @@ static void handle_create_cmd(hlld_conn_handler *handle, char *args, int args_le
 
             // Check for the custom params
             int match = 0;
-            match |= sscanf(param, "precision=%u", &config->default_precision);
-            match |= sscanf(param, "eps=%lf", &config->default_eps);
+            if (sscanf(param, "precision=%u", &config->default_precision)) {
+                // Compute error given precision
+                config->default_eps = hll_error_for_precision(config->default_precision);
+                match = 1;
+            }
+            if (sscanf(param, "eps=%lf", &config->default_eps)) {
+                // Compute precision given error
+                config->default_precision = hll_precision_for_error(config->default_eps);
+                match = 1;
+            }
             match |= sscanf(param, "in_memory=%d", &config->in_memory);
 
             // Check if there was no match
