@@ -89,10 +89,14 @@ void *thread_main(void *in) {
     }
 
     for (int i=0; i< NUM_KEYS; i++) {
-        num = recv(info.conn_fd, (char*)out_buf, 5, 0);
-        if (num != 5) {
-            printf("Failed to read!");
-            return NULL;
+        int remain = 5;
+        while (remain) {
+            num = recv(info.conn_fd, (char*)out_buf, remain, 0);
+            if (num == -1) {
+                printf("Failed to read! Iter: %d. Res: %d\n", i, num);
+                return NULL;
+            }
+            remain -= num;
         }
         sets++;
     }
