@@ -203,7 +203,7 @@ Clients
 
 Here is a list of known client implementations:
 
-* WIP...
+* Python : https://github.com/armon/pyhlld
 
 Here is a list of "best-practices" for client implementations:
 
