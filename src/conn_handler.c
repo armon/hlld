@@ -600,26 +600,46 @@ static conn_cmd_type determine_client_command(char *cmd_buf, int buf_len, char *
     // Search for the command
     conn_cmd_type type = UNKNOWN;
     #define CMD_MATCH(name) (strcmp(name, cmd_buf) == 0)
-    if (CMD_MATCH("s") || CMD_MATCH("set")) {
-        type = SET;
-    } else if (CMD_MATCH("b") || CMD_MATCH("bulk")) {
-        type = SET_MULTI;
-    } else if (CMD_MATCH("list")) {
-        type = LIST;
-    } else if (CMD_MATCH("info")) {
-        type = INFO;
-    } else if (CMD_MATCH("create")) {
-        type = CREATE;
-    } else if (CMD_MATCH("drop")) {
-        type = DROP;
-    } else if (CMD_MATCH("close")) {
-        type = CLOSE;
-    } else if (CMD_MATCH("clear")) {
-        type = CLEAR;
-    } else if (CMD_MATCH("flush")) {
-        type = FLUSH;
-    }
+    switch (*cmd_buf) {
+        case 'b':
+            if (CMD_MATCH("b") || CMD_MATCH("bulk"))
+                type = SET_MULTI;
+            break;
 
+        case 'c':
+            if (CMD_MATCH("create")) {
+                type = CREATE;
+            } else if (CMD_MATCH("close")) {
+                type = CLOSE;
+            } else if (CMD_MATCH("clear")) {
+                type = CLEAR;
+            }
+            break;
+
+        case 'd':
+            if (CMD_MATCH("drop"))
+                type = DROP;
+            break;
+
+        case 'f':
+            if (CMD_MATCH("flush"))
+                type = FLUSH;
+            break;
+
+        case 'i':
+            if (CMD_MATCH("info"))
+                type = INFO;
+
+        case 'l':
+            if (CMD_MATCH("list"))
+                type = LIST;
+            break;
+
+        case 's':
+            if (CMD_MATCH("s") || CMD_MATCH("set"))
+                type = SET;
+            break;
+    }
     return type;
 }
 
