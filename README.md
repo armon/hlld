@@ -6,6 +6,22 @@ to expose HyperLogLog sets and operations over them to
 networked clients. It uses a simple ASCI protocol
 which is human readable, and similar to memcached.
 
+HyperLogLog's are a relatively new sketching data structure.
+They are used to estimate cardinality, i.e. the unique number
+of items in a set. They are based on the observation that any
+bit in a "good" hash function is indepedenent of any other
+bit and that the probability of getting a string of N
+bits all set to the same value is 1/(2^N). There is a lot more in
+the math, but that is the basic intuition. What is even more
+incredible is that the storage required to do the counting
+is log(log(N)). So with a 6 bit register, we can count well into
+the trillions. For more information, its best to read the papers
+referenced at the end.
+
+TL;DR: HyperLogLogs enable you to have a set with about 1.6% variance,
+using 3280 bytes, and estimate sizes in the trillions.
+
+
 Features
 --------
 
