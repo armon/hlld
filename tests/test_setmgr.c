@@ -117,6 +117,57 @@ START_TEST(test_mgr_list)
 }
 END_TEST
 
+START_TEST(test_mgr_list_prefix)
+{
+    hlld_config config;
+    int res = config_from_filename(NULL, &config);
+    fail_unless(res == 0);
+
+    hlld_setmgr *mgr;
+    res = init_set_manager(&config, &mgr);
+    fail_unless(res == 0);
+
+    res = setmgr_create_set(mgr, "bar1", NULL);
+    fail_unless(res == 0);
+    res = setmgr_create_set(mgr, "bar2", NULL);
+    fail_unless(res == 0);
+    res = setmgr_create_set(mgr, "junk1", NULL);
+    fail_unless(res == 0);
+
+    hlld_set_list_head *head;
+    res = setmgr_list_sets(mgr, "bar", &head);
+    fail_unless(res == 0);
+    fail_unless(head->size == 2);
+
+    int has_bar1 = 0;
+    int has_bar2 = 0;
+
+    hlld_set_list *node = head->head;
+    while (node) {
+        if (strcmp(node->set_name, "bar1") == 0)
+            has_bar1 = 1;
+        else if (strcmp(node->set_name, "bar2") == 0)
+            has_bar2 = 1;
+        node = node->next;
+    }
+    fail_unless(has_bar1);
+    fail_unless(has_bar2);
+
+    res = setmgr_drop_set(mgr, "bar1");
+    fail_unless(res == 0);
+    res = setmgr_drop_set(mgr, "bar2");
+    fail_unless(res == 0);
+    res = setmgr_drop_set(mgr, "junk1");
+    fail_unless(res == 0);
+
+    setmgr_cleanup_list(head);
+
+    res = destroy_set_manager(mgr);
+    fail_unless(res == 0);
+}
+END_TEST
+
+
 START_TEST(test_mgr_list_no_sets)
 {
     hlld_config config;

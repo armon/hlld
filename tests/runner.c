@@ -92,6 +92,7 @@ int main(void)
     tcase_add_test(tc6, test_mgr_create_drop);
     tcase_add_test(tc6, test_mgr_create_double_drop);
     tcase_add_test(tc6, test_mgr_list);
+    tcase_add_test(tc6, test_mgr_list_prefix);
     tcase_add_test(tc6, test_mgr_list_no_sets);
     tcase_add_test(tc6, test_mgr_add_keys);
     tcase_add_test(tc6, test_mgr_add_no_set);
