@@ -13,7 +13,6 @@ env_without_err = Environment(CCFLAGS = '-std=c99 -D_GNU_SOURCE -O2 -pthread -Is
 
 objs =  env_with_err.Object('src/config', 'src/config.c') + \
         env_with_err.Object('src/barrier', 'src/barrier.c') + \
-        env_with_err.Object('src/hashmap', 'src/hashmap.c') + \
         env_with_err.Object('src/hll', 'src/hll.c') + \
         env_with_err.Object('src/hll_constants', 'src/hll_constants.c') + \
         env_with_err.Object('src/bitmap', 'src/bitmap.c') + \
@@ -24,7 +23,7 @@ objs =  env_with_err.Object('src/config', 'src/config.c') + \
         env_with_err.Object('src/background', 'src/background.c') + \
         env_with_err.Object('src/art', 'src/art.c')
 
-libs = ["pthread", murmur, inih, "m", "crypto"]
+libs = ["pthread", murmur, inih, "m"]
 if plat == 'Linux':
    libs.append("rt")
 

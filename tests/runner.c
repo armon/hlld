@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <syslog.h>
 #include "test_config.c"
-#include "test_hashmap.c"
 #include "test_hll.c"
 #include "test_bitmap.c"
 #include "test_set.c"
@@ -15,7 +14,6 @@ int main(void)
 
     Suite *s1 = suite_create("hlld");
     TCase *tc1 = tcase_create("config");
-    TCase *tc2 = tcase_create("hashmap");
     TCase *tc3 = tcase_create("bitmap");
     TCase *tc4 = tcase_create("hll");
     TCase *tc5 = tcase_create("set");
@@ -48,32 +46,17 @@ int main(void)
     tcase_add_test(tc1, test_set_config_basic_config);
     tcase_add_test(tc1, test_update_filename_from_set_config);
 
-    // Add the hashmap tests
-    suite_add_tcase(s1, tc2);
-    tcase_add_test(tc2, test_map_init_and_destroy);
-    tcase_add_test(tc2, test_map_get_no_keys);
-    tcase_add_test(tc2, test_map_put);
-    tcase_add_test(tc2, test_map_put_get);
-    tcase_add_test(tc2, test_map_delete_no_keys);
-    tcase_add_test(tc2, test_map_put_delete);
-    tcase_add_test(tc2, test_map_put_delete_get);
-    tcase_add_test(tc2, test_map_clear_no_keys);
-    tcase_add_test(tc2, test_map_put_clear_get);
-    tcase_add_test(tc2, test_map_iter_no_keys);
-    tcase_add_test(tc2, test_map_put_iter_break);
-    tcase_add_test(tc2, test_map_put_grow);
-
     // Add the bitmap tests
     suite_add_tcase(s1, tc3);
     tcase_set_timeout(tc3, 3);
-    tcase_add_test(tc2, make_anonymous_bitmap);
-    tcase_add_test(tc2, make_bitmap_zero_size);
-    tcase_add_test(tc2, make_bitmap_bad_fileno);
-    tcase_add_test(tc2, make_bitmap_bad_fileno_persistent);
-    tcase_add_test(tc2, make_bitmap_nofile);
-    tcase_add_test(tc2, make_bitmap_nofile_persistent);
-    tcase_add_test(tc2, make_bitmap_nofile_create);
-    tcase_add_test(tc2, make_bitmap_nofile_create_persistent);
+    tcase_add_test(tc3, make_anonymous_bitmap);
+    tcase_add_test(tc3, make_bitmap_zero_size);
+    tcase_add_test(tc3, make_bitmap_bad_fileno);
+    tcase_add_test(tc3, make_bitmap_bad_fileno_persistent);
+    tcase_add_test(tc3, make_bitmap_nofile);
+    tcase_add_test(tc3, make_bitmap_nofile_persistent);
+    tcase_add_test(tc3, make_bitmap_nofile_create);
+    tcase_add_test(tc3, make_bitmap_nofile_create_persistent);
 
     // Add the hll tests
     suite_add_tcase(s1, tc4);
