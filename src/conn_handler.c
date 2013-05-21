@@ -372,12 +372,11 @@ static void list_set_cb(void *data, char *set_name, hlld_set *set) {
 }
 
 static void handle_list_cmd(hlld_conn_handler *handle, char *args, int args_len) {
-    (void)args;
     (void)args_len;
 
     // List all the sets
     hlld_set_list_head *head;
-    int res = setmgr_list_sets(handle->mgr, &head);
+    int res = setmgr_list_sets(handle->mgr, args, &head);
     if (res != 0) {
         INTERNAL_ERROR();
         return;
@@ -509,7 +508,7 @@ static void handle_flush_cmd(hlld_conn_handler *handle, char *args, int args_len
 
     // List all the sets
     hlld_set_list_head *head;
-    int res = setmgr_list_sets(handle->mgr, &head);
+    int res = setmgr_list_sets(handle->mgr, NULL, &head);
     if (res != 0) {
         INTERNAL_ERROR();
         return;

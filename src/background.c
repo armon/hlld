@@ -92,7 +92,7 @@ static void* flush_thread_main(void *in) {
             // List all the sets
             syslog(LOG_INFO, "Scheduled flush started.");
             hlld_set_list_head *head;
-            int res = setmgr_list_sets(mgr, &head);
+            int res = setmgr_list_sets(mgr, NULL, &head);
             if (res != 0) {
                 syslog(LOG_WARNING, "Failed to list sets for flushing!");
                 continue;

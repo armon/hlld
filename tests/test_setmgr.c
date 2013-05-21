@@ -87,7 +87,7 @@ START_TEST(test_mgr_list)
     fail_unless(res == 0);
 
     hlld_set_list_head *head;
-    res = setmgr_list_sets(mgr, &head);
+    res = setmgr_list_sets(mgr, NULL, &head);
     fail_unless(res == 0);
     fail_unless(head->size == 2);
 
@@ -128,7 +128,7 @@ START_TEST(test_mgr_list_no_sets)
     fail_unless(res == 0);
 
     hlld_set_list_head *head;
-    res = setmgr_list_sets(mgr, &head);
+    res = setmgr_list_sets(mgr, NULL, &head);
     fail_unless(res == 0);
     fail_unless(head->size == 0);
     setmgr_cleanup_list(head);
