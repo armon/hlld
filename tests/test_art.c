@@ -195,6 +195,7 @@ typedef struct {
 } prefix_data;
 
 static int test_prefix_cb(void *data, const char *k, uint32_t k_len, void *val) {
+    (void)val;
     prefix_data *p = data;
     fail_unless(p->count < p->max_count);
     fail_unless(memcmp(k, p->expected[p->count], k_len) == 0);
