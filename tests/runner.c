@@ -136,6 +136,7 @@ int main(void)
     tcase_add_test(tc7, test_art_insert_delete);
     tcase_add_test(tc7, test_art_insert_iter);
     tcase_add_test(tc7, test_art_iter_prefix);
+    tcase_add_test(tc7, test_art_insert_copy_delete);
 
     srunner_run_all(sr, CK_ENV);
     nf = srunner_ntests_failed(sr);

@@ -270,3 +270,62 @@ START_TEST(test_art_iter_prefix)
 }
 END_TEST
 
+START_TEST(test_art_insert_copy_delete)
+{
+    art_tree t;
+    int res = init_art_tree(&t);
+    fail_unless(res == 0);
+
+    int len;
+    char buf[512];
+    FILE *f = fopen("tests/words.txt", "r");
+
+    uintptr_t line = 1, nlines;
+    while (fgets(buf, sizeof buf, f)) {
+        len = strlen(buf);
+        buf[len-1] = '\0';
+        fail_unless(NULL ==
+            art_insert(&t, buf, len, (void*)line));
+        line++;
+    }
+
+    nlines = line - 1;
+
+    // Create a new tree
+    art_tree t2;
+    fail_unless(art_copy(&t2, &t) == 0);
+
+    // Destroy the original
+    res = destroy_art_tree(&t);
+    fail_unless(res == 0);
+
+    // Seek back to the start
+    fseek(f, 0, SEEK_SET);
+
+    // Search for each line
+    line = 1;
+    while (fgets(buf, sizeof buf, f)) {
+        len = strlen(buf);
+        buf[len-1] = '\0';
+
+        // Search first, ensure all entries still
+        // visible
+        uintptr_t val = (uintptr_t)art_search(&t, buf, len);
+        fail_unless(line == val, "Line: %d Val: %" PRIuPTR " Str: %s\n", line,
+            val, buf);
+
+        // Delete, should get lineno back
+        val = (uintptr_t)art_delete(&t, buf, len);
+        fail_unless(line == val, "Line: %d Val: %" PRIuPTR " Str: %s\n", line,
+            val, buf);
+
+        // Check the size
+        fail_unless(art_size(&t) == nlines - line);
+        line++;
+    }
+
+    res = destroy_art_tree(&t2);
+    fail_unless(res == 0);
+}
+END_TEST
+
