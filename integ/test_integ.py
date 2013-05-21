@@ -91,6 +91,23 @@ class TestInteg(object):
         assert "foobar" in fh.readline()
         assert fh.readline() == "END\n"
 
+    def test_list_prefix(self, servers):
+        "Tests creating a set"
+        server, _ = servers
+        fh = server.makefile()
+        server.sendall("create foobar\n")
+        assert fh.readline() == "Done\n"
+        server.sendall("create foobaz\n")
+        assert fh.readline() == "Done\n"
+        server.sendall("create test\n")
+        assert fh.readline() == "Done\n"
+
+        server.sendall("list foo\n")
+        assert fh.readline() == "START\n"
+        assert "foobaz" in fh.readline()
+        assert "foobar" in fh.readline()
+        assert fh.readline() == "END\n"
+
     def test_create_bad(self, servers):
         "Tests creating a set"
         server, _ = servers
