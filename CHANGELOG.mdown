@@ -4,6 +4,7 @@
   improves the create/drop time for instances with many many sets.
   * `list` command now can take a prefix and returns only sets matching
   * As a result of the ART tree, list results are sorted in descending order
+  * Git SHA: a07e29b
 
 # 0.1.0
 
