@@ -52,7 +52,7 @@ int init_set(hlld_config *config, char *set_name, int discover, hlld_set **set) 
     hlld_set *s = *set = calloc(1, sizeof(hlld_set));
 
     // Initialize
-    s->is_dirty = 0;
+    s->is_dirty = 1;
     s->is_proxied = 1;
 
     // Store the things
@@ -164,7 +164,7 @@ int hset_flush(hlld_set *set) {
     gettimeofday(&start, NULL);
 
     // If we are not dirty, nothing to do
-    if (!set->is_dirty && set->set_config.size != 0)
+    if (!set->is_dirty)
         return 0;
 
     // Store our properties for a future unmap
