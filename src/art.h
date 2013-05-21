@@ -63,6 +63,7 @@ typedef struct {
  * of arbitrary size, as they include the key.
  */
 typedef struct {
+    uint16_t ref_count;
     void *value;
     uint32_t key_len;
     unsigned char key[];
@@ -163,5 +164,18 @@ int art_iter(art_tree *t, art_callback cb, void *data);
  * @return 0 on success, or the return of the callback.
  */
 int art_iter_prefix(art_tree *t, char *prefix, int prefix_len, art_callback cb, void *data);
+
+/**
+ * Creates a copy of an ART tree. The two trees will
+ * share the internal leaves, but will NOT share internal nodes.
+ * This allows leaves to be added and deleted from each tree
+ * individually. It is important that concurrent updates to
+ * a given key has no well defined behavior since the leaves are
+ * shared.
+ * @arg dst The destination tree. Not initialized yet.
+ * @arg src The source tree, must be initialized.
+ * @return 0 on success.
+ */
+int art_copy(art_tree *dst, art_tree *src);
 
 #endif

@@ -56,7 +56,11 @@ static void destroy_node(art_node *n) {
 
     // Special case leafs
     if (IS_LEAF(n)) {
-        free(LEAF_RAW(n));
+        // Only release the leaf if the ref count hits zero
+        art_leaf *l = LEAF_RAW(n);
+        int ref = __sync_sub_and_fetch(&l->ref_count, 1);
+        if (!ref)
+            free(l);
         return;
     }
 
@@ -316,6 +320,7 @@ art_leaf* art_maximum(art_tree *t) {
 
 static art_leaf* make_leaf(char *key, int key_len, void *value) {
     art_leaf *l = malloc(sizeof(art_leaf)+key_len);
+    l->ref_count = 1;
     l->value = value;
     l->key_len = key_len;
     memcpy(l->key, key, key_len);
@@ -744,7 +749,12 @@ void* art_delete(art_tree *t, char *key, int key_len) {
     if (l) {
         t->size--;
         void *old = l->value;
-        free(l);
+
+        // Only release the leaf if the ref count hits zero
+        int ref = __sync_sub_and_fetch(&l->ref_count, 1);
+        if (!ref)
+            free(l);
+
         return old;
     }
     return NULL;
@@ -883,6 +893,83 @@ int art_iter_prefix(art_tree *t, char *key, int key_len, art_callback cb, void *
         n = (child) ? *child : NULL;
         depth++;
     }
+    return 0;
+}
+
+// Recursively copies a tree
+static art_node* recursive_copy(art_node *n) {
+    // Handle the NULL nodes
+    if (!n) return NULL;
+
+    // Handle leaves
+    if (IS_LEAF(n)) {
+        // Re-use leaf, increment ref-count
+        art_leaf *l = LEAF_RAW(n);
+        __sync_fetch_and_add(&l->ref_count, 1);
+        return n;
+    }
+
+    union {
+        art_node4 *p1;
+        art_node16 *p2;
+        art_node48 *p3;
+        art_node256 *p4;
+    } p;
+    switch (n->type) {
+        case NODE4:
+            p.p1 = (art_node4*)alloc_node(NODE4);
+            copy_header((art_node*)p.p1, n);
+            memcpy(p.p1->keys, ((art_node4*)n)->keys, 4);
+            for (int i=0; i < n->num_children; i++) {
+                p.p1->children[i] = recursive_copy(((art_node4*)n)->children[i]);
+            }
+            return (art_node*)p.p1;
+
+        case NODE16:
+            p.p2 = (art_node16*)alloc_node(NODE16);
+            copy_header((art_node*)p.p2, n);
+            memcpy(p.p1->keys, ((art_node16*)n)->keys, 16);
+            for (int i=0; i < n->num_children; i++) {
+                p.p2->children[i] = recursive_copy(((art_node16*)n)->children[i]);
+            }
+            return (art_node*)p.p2;
+
+        case NODE48:
+            p.p3 = (art_node48*)alloc_node(NODE48);
+            copy_header((art_node*)p.p3, n);
+            memcpy(p.p3->keys, ((art_node48*)n)->keys, 256);
+            for (int i=0; i < n->num_children; i++) {
+                p.p3->children[i] = recursive_copy(((art_node48*)n)->children[i]);
+            }
+            return (art_node*)p.p3;
+
+        case NODE256:
+            p.p4 = (art_node256*)alloc_node(NODE256);
+            copy_header((art_node*)p.p4, n);
+            for (int i=0; i < 256; i++) {
+                p.p4->children[i] = recursive_copy(((art_node256*)n)->children[i]);
+            }
+            return (art_node*)p.p4;
+
+        default:
+            abort();
+    }
+}
+
+/**
+ * Creates a copy of an ART tree. The two trees will
+ * share the internal leaves, but will NOT share internal nodes.
+ * This allows leaves to be added and deleted from each tree
+ * individually. It is important that concurrent updates to
+ * a given key has no well defined behavior since the leaves are
+ * shared.
+ * @arg dst The destination tree. Not initialized yet.
+ * @arg src The source tree, must be initialized.
+ * @return 0 on success.
+ */
+int art_copy(art_tree *dst, art_tree *src) {
+    dst->size = src->size;
+    dst->root = recursive_copy(src->root);
     return 0;
 }
 
