@@ -7,6 +7,7 @@
 #include "test_bitmap.c"
 #include "test_set.c"
 #include "test_setmgr.c"
+#include "test_art.c"
 
 int main(void)
 {
@@ -19,6 +20,7 @@ int main(void)
     TCase *tc4 = tcase_create("hll");
     TCase *tc5 = tcase_create("set");
     TCase *tc6 = tcase_create("manager");
+    TCase *tc7 = tcase_create("art");
     SRunner *sr = srunner_create(s1);
     int nf;
 
@@ -125,6 +127,15 @@ int main(void)
     tcase_add_test(tc6, test_mgr_create_custom_config);
     tcase_add_test(tc6, test_mgr_restore);
     tcase_add_test(tc6, test_mgr_callback);
+
+    // Add the art tests
+    suite_add_tcase(s1, tc7);
+    tcase_add_test(tc7, test_art_init_and_destroy);
+    tcase_add_test(tc7, test_art_insert);
+    tcase_add_test(tc7, test_art_insert_search);
+    tcase_add_test(tc7, test_art_insert_delete);
+    tcase_add_test(tc7, test_art_insert_iter);
+    tcase_add_test(tc7, test_art_iter_prefix);
 
     srunner_run_all(sr, CK_ENV);
     nf = srunner_ntests_failed(sr);
