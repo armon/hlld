@@ -310,17 +310,17 @@ START_TEST(test_art_insert_copy_delete)
 
         // Search first, ensure all entries still
         // visible
-        uintptr_t val = (uintptr_t)art_search(&t, buf, len);
+        uintptr_t val = (uintptr_t)art_search(&t2, buf, len);
         fail_unless(line == val, "Line: %d Val: %" PRIuPTR " Str: %s\n", line,
             val, buf);
 
         // Delete, should get lineno back
-        val = (uintptr_t)art_delete(&t, buf, len);
+        val = (uintptr_t)art_delete(&t2, buf, len);
         fail_unless(line == val, "Line: %d Val: %" PRIuPTR " Str: %s\n", line,
             val, buf);
 
         // Check the size
-        fail_unless(art_size(&t) == nlines - line);
+        fail_unless(art_size(&t2) == nlines - line);
         line++;
     }
 
