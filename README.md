@@ -96,7 +96,7 @@ and ending the line in a newline (carriage return is optional).
 There are a total of 9 commands:
 
 * create - Create a new set (a set is a named HyperLogLog)
-* list - List all sets
+* list - List all sets or those matching a prefix
 * drop - Drop a set (Deletes from disk)
 * close - Closes a set (Unmaps from memory, but still accessible)
 * clear - Clears a set from the lists (Removes memory, left on disk)
@@ -128,8 +128,14 @@ occurs if a set of the same name was recently deleted, and hlld
 has not yet completed the delete operation. If so, a client should
 retry the create in a few seconds.
 
-The ``list`` command takes no arguments, and returns information
-about all the sets. Here is an example response::
+The ``list`` command takes either no arguments or a set prefix, and returns information
+about the matching sets.
+
+For example, doing:
+
+    list foo
+
+Will return a list of all filters with the foo prefix. Here is an example response:
 
     START
     foobar 0.010000 14 13108 0
