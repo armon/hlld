@@ -122,10 +122,11 @@ int setmgr_clear_set(hlld_setmgr *mgr, char *set_name);
  * list of all the sets. The memory should be free'd by
  * the caller.
  * @arg mgr The manager to list from
+ * @arg prefix The prefix to match on or NULL
  * @arg head Output, sets to the address of the list header
  * @return 0 on success.
  */
-int setmgr_list_sets(hlld_setmgr *mgr, hlld_set_list_head **head);
+int setmgr_list_sets(hlld_setmgr *mgr, char *prefix, hlld_set_list_head **head);
 
 /**
  * Allocates space for and returns a linked

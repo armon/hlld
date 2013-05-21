@@ -498,16 +498,22 @@ int setmgr_clear_set(hlld_setmgr *mgr, char *set_name) {
  * Allocates space for and returns a linked
  * list of all the sets.
  * @arg mgr The manager to list from
+ * @arg prefix The prefix to match on or NULL
  * @arg head Output, sets to the address of the list header
  * @return 0 on success.
  */
-int setmgr_list_sets(hlld_setmgr *mgr, hlld_set_list_head **head) {
+int setmgr_list_sets(hlld_setmgr *mgr, char *prefix, hlld_set_list_head **head) {
     // Allocate the head
     hlld_set_list_head *h = *head = calloc(1, sizeof(hlld_set_list_head));
 
     // Iterate through a callback to append
     setmgr_vsn *current = mgr->latest;
-    art_iter(&current->set_map, set_map_list_cb, h);
+
+    // Check if we should use the prefix
+    if (prefix)
+        art_iter_prefix(&current->set_map, prefix, strlen(prefix), set_map_list_cb, h);
+    else
+        art_iter(&current->set_map, set_map_list_cb, h);
     return 0;
 }
 
