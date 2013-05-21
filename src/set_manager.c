@@ -6,7 +6,7 @@
 #include <string.h>
 #include "spinlock.h"
 #include "set_manager.h"
-#include "hashmap.h"
+#include "art.h"
 #include "set.h"
 #include "type_compat.h"
 
@@ -37,7 +37,7 @@ typedef struct setmgr_vsn {
     unsigned long long vsn;
 
     // Maps key names -> hlld_set_wrapper
-    hashmap *set_map;
+    art_tree set_map;
 
     // Holds a reference to the deleted set, since
     // it is no longer in the hash map
@@ -95,13 +95,12 @@ static const int FOLDER_PREFIX_LEN = sizeof(FOLDER_PREFIX) - 1;
 static hlld_set_wrapper* take_set(setmgr_vsn *vsn, char *set_name);
 static void delete_set(hlld_set_wrapper *set);
 static int add_set(hlld_setmgr *mgr, setmgr_vsn *vsn, char *set_name, hlld_config *config, int is_hot);
-static int set_map_list_cb(void *data, const char *key, void *value);
-static int set_map_list_cold_cb(void *data, const char *key, void *value);
-static int set_map_delete_cb(void *data, const char *key, void *value);
+static int set_map_list_cb(void *data, const char *key, uint32_t key_len, void *value);
+static int set_map_list_cold_cb(void *data, const char *key, uint32_t key_len, void *value);
+static int set_map_delete_cb(void *data, const char *key, uint32_t key_len, void *value);
 static int load_existing_sets(hlld_setmgr *mgr);
 static setmgr_vsn* create_new_version(hlld_setmgr *mgr);
 static void destroy_version(setmgr_vsn *vsn);
-static int copy_hash_entries(void *data, const char *key, void *value);
 static void* setmgr_thread_main(void *in);
 
 /**
@@ -125,9 +124,9 @@ int init_set_manager(hlld_config *config, hlld_setmgr **mgr) {
     // Allocate the initial version and hash table
     setmgr_vsn *vsn = calloc(1, sizeof(setmgr_vsn));
     m->latest = vsn;
-    int res = hashmap_init(0, &vsn->set_map);
+    int res = init_art_tree(&vsn->set_map);
     if (res) {
-        syslog(LOG_ERR, "Failed to allocate set hash map!");
+        syslog(LOG_ERR, "Failed to allocate set map!");
         free(m);
         return -1;
     }
@@ -159,7 +158,7 @@ int destroy_set_manager(hlld_setmgr *mgr) {
 
     // Nuke all the keys in the current version
     setmgr_vsn *current = mgr->latest;
-    hashmap_iter(current->set_map, set_map_delete_cb, mgr);
+    art_iter(&current->set_map, set_map_delete_cb, mgr);
 
     // Destroy the versions
     setmgr_vsn *next, *vsn = mgr->latest;
@@ -344,7 +343,7 @@ int setmgr_create_set(hlld_setmgr *mgr, char *set_name, hlld_config *custom_conf
     // Bail if the set already exists
     hlld_set_wrapper *set = NULL;
     setmgr_vsn *latest = mgr->latest;
-    hashmap_get(latest->set_map, set_name, (void**)&set);
+    set = art_search(&latest->set_map, set_name, strlen(set_name)+1);
     if (set) {
         pthread_mutex_unlock(&mgr->write_lock);
         return -1;
@@ -409,7 +408,7 @@ int setmgr_drop_set(hlld_setmgr *mgr, char *set_name) {
 
     // Create a new version without this set
     setmgr_vsn *new_vsn = create_new_version(mgr);
-    hashmap_delete(new_vsn->set_map, set_name);
+    art_delete(&new_vsn->set_map, set_name, strlen(set_name)+1);
     current->deleted = set;
 
     // Install the new version
@@ -483,7 +482,7 @@ int setmgr_clear_set(hlld_setmgr *mgr, char *set_name) {
 
     // Create a new version without this set
     setmgr_vsn *new_vsn = create_new_version(mgr);
-    hashmap_delete(new_vsn->set_map, set_name);
+    art_delete(&new_vsn->set_map, set_name, strlen(set_name)+1);
     current->deleted = set;
 
     // Install the new version
@@ -508,7 +507,7 @@ int setmgr_list_sets(hlld_setmgr *mgr, hlld_set_list_head **head) {
 
     // Iterate through a callback to append
     setmgr_vsn *current = mgr->latest;
-    hashmap_iter(current->set_map, set_map_list_cb, h);
+    art_iter(&current->set_map, set_map_list_cb, h);
     return 0;
 }
 
@@ -527,7 +526,7 @@ int setmgr_list_cold_sets(hlld_setmgr *mgr, hlld_set_list_head **head) {
 
     // Scan for the cold sets
     setmgr_vsn *current = mgr->latest;
-    hashmap_iter(current->set_map, set_map_list_cold_cb, h);
+    art_iter(&current->set_map, set_map_list_cold_cb, h);
     return 0;
 }
 
@@ -571,8 +570,7 @@ void setmgr_cleanup_list(hlld_set_list_head *head) {
  * Gets the hlld set in a thread safe way.
  */
 static hlld_set_wrapper* take_set(setmgr_vsn *vsn, char *set_name) {
-    hlld_set_wrapper *set = NULL;
-    hashmap_get(vsn->set_map, set_name, (void**)&set);
+    hlld_set_wrapper *set = art_search(&vsn->set_map, set_name, strlen(set_name)+1);
     return (set && set->is_active) ? set : NULL;
 }
 
@@ -631,11 +629,7 @@ static int add_set(hlld_setmgr *mgr, setmgr_vsn *vsn, char *set_name, hlld_confi
     }
 
     // Add to the hash map
-    if (!hashmap_put(vsn->set_map, set_name, set)) {
-        destroy_set(set->set);
-        free(set);
-        return -1;
-    }
+    art_insert(&vsn->set_map, set_name, strlen(set_name)+1, set);
     return 0;
 }
 
@@ -644,7 +638,8 @@ static int add_set(hlld_setmgr *mgr, setmgr_vsn *vsn, char *set_name, hlld_confi
  * to list all the sets. Only works if value is
  * not NULL.
  */
-static int set_map_list_cb(void *data, const char *key, void *value) {
+static int set_map_list_cb(void *data, const char *key, uint32_t key_len, void *value) {
+    (void)key_len;
     // set out the non-active nodes
     hlld_set_wrapper *set = value;
     if (!set->is_active) return 0;
@@ -670,7 +665,8 @@ static int set_map_list_cb(void *data, const char *key, void *value) {
  * to list cold sets. Only works if value is
  * not NULL.
  */
-static int set_map_list_cold_cb(void *data, const char *key, void *value) {
+static int set_map_list_cold_cb(void *data, const char *key, uint32_t key_len, void *value) {
+    (void)key_len;
     // Cast the inputs
     hlld_set_list_head *head = data;
     hlld_set_wrapper *set = value;
@@ -703,9 +699,10 @@ static int set_map_list_cold_cb(void *data, const char *key, void *value) {
  * Called as part of the hashmap callback
  * to cleanup the sets.
  */
-static int set_map_delete_cb(void *data, const char *key, void *value) {
+static int set_map_delete_cb(void *data, const char *key, uint32_t key_len, void *value) {
     (void)data;
     (void)key;
+    (void)key_len;
 
     // Cast the inputs
     hlld_set_wrapper *set = value;
@@ -784,20 +781,10 @@ static setmgr_vsn* create_new_version(hlld_setmgr *mgr) {
     // Set the previous pointer
     vsn->prev = current;
 
-    // Initialize the hashmap
-    int res = hashmap_init(hashmap_size(current->set_map), &vsn->set_map);
+    // Initialize the map
+    int res = art_copy(&vsn->set_map, &current->set_map);
     if (res) {
-        syslog(LOG_ERR, "Failed to allocate new set hash map!");
-        free(vsn);
-        return NULL;
-    }
-
-    // Copy old keys, this is likely a bottle neck...
-    // We need to make this more efficient in the future.
-    res = hashmap_iter(current->set_map, copy_hash_entries, vsn->set_map);
-    if (res != 0) {
-        syslog(LOG_ERR, "Failed to copy set hash map!");
-        hashmap_destroy(vsn->set_map);
+        syslog(LOG_ERR, "Failed to copy set map!");
         free(vsn);
         return NULL;
     }
@@ -809,16 +796,9 @@ static setmgr_vsn* create_new_version(hlld_setmgr *mgr) {
 
 // Destroys a version. Does basic cleanup.
 static void destroy_version(setmgr_vsn *vsn) {
-    hashmap_destroy(vsn->set_map);
+    destroy_art_tree(&vsn->set_map);
     free(vsn);
 }
-
-// Copies entries from an existing map into a new one
-static int copy_hash_entries(void *data, const char *key, void *value) {
-    hashmap *new = data;
-    return (hashmap_put(new, (char*)key, value) ? 0 : 1);
-}
-
 
 // Recursively waits and cleans up old versions
 static int clean_old_versions(setmgr_vsn *v, unsigned long long min_vsn) {
