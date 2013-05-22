@@ -269,6 +269,7 @@ static art_leaf* minimum(art_node *n) {
         case NODE48:
             idx=0;
             while (!((art_node48*)n)->keys[idx]) idx++;
+            idx = ((art_node48*)n)->keys[idx] - 1;
             return minimum(((art_node48*)n)->children[idx]);
         case NODE256:
             idx=0;
@@ -294,6 +295,7 @@ static art_leaf* maximum(art_node *n) {
         case NODE48:
             idx=255;
             while (!((art_node48*)n)->keys[idx]) idx--;
+            idx = ((art_node48*)n)->keys[idx] - 1;
             return maximum(((art_node48*)n)->children[idx]);
         case NODE256:
             idx=255;
