@@ -524,7 +524,7 @@ static void* recursive_insert(art_node *n, art_node **ref, char *key, int key_le
     if (n->partial_len) {
         // Determine if the prefixes differ, since we need to split
         int prefix_diff = prefix_mismatch(n, key, key_len, depth);
-        if ((uint32_t)prefix_diff == n->partial_len) {
+        if ((uint32_t)prefix_diff >= n->partial_len) {
             depth += n->partial_len;
             goto RECURSE_SEARCH;
         }
@@ -873,7 +873,7 @@ int art_iter_prefix(art_tree *t, char *key, int key_len, art_callback cb, void *
 
         // Bail if the prefix does not match
         if (n->partial_len) {
-            prefix_len = check_prefix(n, key, key_len, depth);
+            prefix_len = prefix_mismatch(n, key, key_len, depth);
 
             // If there is no match, search is terminated
             if (!prefix_len)
