@@ -376,6 +376,22 @@ class TestInteg(object):
 
         assert False, "Failed to do a concurrent create"
 
+    def test_create_huge_prefix(self, servers):
+        "Tests creating a set"
+        server, _ = servers
+        fh = server.makefile()
+        server.sendall("create filter:test:very:long:common:prefix:1\n")
+        server.sendall("create filter:test:very:long:common:prefix:2\n")
+        server.sendall("create filter:test:very:long:sub:prefix:1\n")
+        assert fh.readline() == "Done\n"
+        assert fh.readline() == "Done\n"
+        assert fh.readline() == "Done\n"
+        server.sendall("list filter:test\n")
+        assert fh.readline() == "START\n"
+        assert "filter:test:very:long:sub:prefix:1" in fh.readline()
+        assert "filter:test:very:long:common:prefix:2" in fh.readline()
+        assert "filter:test:very:long:common:prefix:1" in fh.readline()
+        assert fh.readline() == "END\n"
 
 if __name__ == "__main__":
     sys.exit(pytest.main(args="-k TestInteg."))
