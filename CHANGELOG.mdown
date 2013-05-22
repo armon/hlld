@@ -1,7 +1,7 @@
-# 0.2.1
+# 0.2.2
 
   * Fixed bugs involving sets with very long common prefixes
-  * Git SHA: bca4fbd
+  * Git SHA: c3d0730
 
 # 0.2.0
 
