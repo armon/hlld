@@ -39,6 +39,21 @@ to expose HyperLogLog sets and operations over them to
 networked clients. It uses a simple ASCI protocol
 which is human readable, and similar to memcached.</p>
 
+<p>HyperLogLog's are a relatively new sketching data structure.
+They are used to estimate cardinality, i.e. the unique number
+of items in a set. They are based on the observation that any
+bit in a "good" hash function is indepedenent of any other
+bit and that the probability of getting a string of N
+bits all set to the same value is 1/(2^N). There is a lot more in
+the math, but that is the basic intuition. What is even more
+incredible is that the storage required to do the counting
+is log(log(N)). So with a 6 bit register, we can count well into
+the trillions. For more information, its best to read the papers
+referenced at the end.</p>
+
+<p>TL;DR: HyperLogLogs enable you to have a set with about 1.6% variance,
+using 3280 bytes, and estimate sizes in the trillions.</p>
+
 <h2>Features</h2>
 
 <ul>
@@ -114,7 +129,7 @@ and ending the line in a newline (carriage return is optional).</p>
 
 <ul>
 <li>create - Create a new set (a set is a named HyperLogLog)</li>
-<li>list - List all sets</li>
+<li>list - List all sets or those matching a prefix</li>
 <li>drop - Drop a set (Deletes from disk)</li>
 <li>close - Closes a set (Unmaps from memory, but still accessible)</li>
 <li>clear - Clears a set from the lists (Removes memory, left on disk)</li>
@@ -147,8 +162,15 @@ occurs if a set of the same name was recently deleted, and hlld
 has not yet completed the delete operation. If so, a client should
 retry the create in a few seconds.</p>
 
-<p>The <code>list</code> command takes no arguments, and returns information
-about all the sets. Here is an example response::</p>
+<p>The <code>list</code> command takes either no arguments or a set prefix, and returns information
+about the matching sets.</p>
+
+<p>For example, doing:</p>
+
+<pre><code>list foo
+</code></pre>
+
+<p>Will return a list of all filters with the foo prefix. Here is an example response:</p>
 
 <pre><code>START
 foobar 0.010000 14 13108 0
@@ -241,7 +263,8 @@ END
 <p>Here is a list of known client implementations:</p>
 
 <ul>
-<li>WIP...</li>
+<li>Python : <a href="https://github.com/armon/pyhlld">https://github.com/armon/pyhlld</a>
+</li>
 </ul><p>Here is a list of "best-practices" for client implementations:</p>
 
 <ul>
