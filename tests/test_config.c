@@ -16,8 +16,8 @@ START_TEST(test_config_get_default)
     fail_unless(config.tcp_port == 4553);
     fail_unless(config.udp_port == 4554);
     fail_unless(strcmp(config.data_dir, "/tmp/hlld") == 0);
-    fail_unless(strcmp(config.log_level, "DEBUG") == 0);
-    fail_unless(config.syslog_log_level == LOG_DEBUG);
+    fail_unless(strcmp(config.log_level, "INFO") == 0);
+    fail_unless(config.syslog_log_level == LOG_INFO);
     fail_unless(config.default_eps == 0.01625);
     fail_unless(config.default_precision == 12);
     fail_unless(config.flush_interval == 60);
@@ -38,8 +38,8 @@ START_TEST(test_config_bad_file)
     fail_unless(config.tcp_port == 4553);
     fail_unless(config.udp_port == 4554);
     fail_unless(strcmp(config.data_dir, "/tmp/hlld") == 0);
-    fail_unless(strcmp(config.log_level, "DEBUG") == 0);
-    fail_unless(config.syslog_log_level == LOG_DEBUG);
+    fail_unless(strcmp(config.log_level, "INFO") == 0);
+    fail_unless(config.syslog_log_level == LOG_INFO);
     fail_unless(config.default_eps == 0.01625);
     fail_unless(config.default_precision == 12);
     fail_unless(config.flush_interval == 60);
@@ -64,8 +64,8 @@ START_TEST(test_config_empty_file)
     fail_unless(config.tcp_port == 4553);
     fail_unless(config.udp_port == 4554);
     fail_unless(strcmp(config.data_dir, "/tmp/hlld") == 0);
-    fail_unless(strcmp(config.log_level, "DEBUG") == 0);
-    fail_unless(config.syslog_log_level == LOG_DEBUG);
+    fail_unless(strcmp(config.log_level, "INFO") == 0);
+    fail_unless(config.syslog_log_level == LOG_INFO);
     fail_unless(config.default_eps == 0.01625);
     fail_unless(config.default_precision == 12);
     fail_unless(config.flush_interval == 60);
