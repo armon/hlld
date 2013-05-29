@@ -190,7 +190,7 @@ int hset_flush(hlld_set *set) {
 
     // Compute the elapsed time
     gettimeofday(&end, NULL);
-    syslog(LOG_INFO, "Flushed set '%s'. Total time: %d msec.",
+    syslog(LOG_DEBUG, "Flushed set '%s'. Total time: %d msec.",
             set->set_name, timediff_msec(&start, &end));
     return res;
 }
