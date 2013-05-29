@@ -264,8 +264,16 @@ int setmgr_flush_set(hlld_setmgr *mgr, char *set_name) {
     hlld_set_wrapper *set = take_set(current, set_name);
     if (!set) return -1;
 
+    // Acquire the READ lock. We use the read lock
+    // since clients might inspect the hll, which
+    // should not be cleared in the mean time
+    pthread_rwlock_rdlock(&set->rwlock);
+
     // Flush
     hset_flush(set->set);
+
+    // Release the lock
+    pthread_rwlock_unlock(&set->rwlock);
     return 0;
 }
 
@@ -551,8 +559,16 @@ int setmgr_set_cb(hlld_setmgr *mgr, char *set_name, set_cb cb, void* data) {
     hlld_set_wrapper *set = take_set(current, set_name);
     if (!set) return -1;
 
+    // Acquire the READ lock. We use the read lock
+    // since clients might inspect the hll, which
+    // should not be cleared in the mean time
+    pthread_rwlock_rdlock(&set->rwlock);
+
     // Callback
     cb(data, set_name, set->set);
+
+    // Release the lock
+    pthread_rwlock_unlock(&set->rwlock);
     return 0;
 }
 
