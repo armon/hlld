@@ -140,7 +140,7 @@ static void* unmap_thread_main(void *in) {
             syslog(LOG_INFO, "Cold set count: %d", head->size);
             hlld_set_list *node = head->head;
             while (node) {
-                syslog(LOG_INFO, "Unmapping set '%s' for being cold.", node->set_name);
+                syslog(LOG_DEBUG, "Unmapping set '%s' for being cold.", node->set_name);
                 setmgr_unmap_set(mgr, node->set_name);
                 node = node->next;
             }
