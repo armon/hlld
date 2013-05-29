@@ -1,6 +1,8 @@
 #include <unistd.h>
+#include <sys/time.h>
 #include "background.h"
 
+static int timediff_msec(struct timeval *t1, struct timeval *t2);
 static void* flush_thread_main(void *in);
 static void* unmap_thread_main(void *in);
 typedef struct {
@@ -89,6 +91,10 @@ static void* flush_thread_main(void *in) {
         sleep(1);
         setmgr_client_checkpoint(mgr);
         if ((++ticks % config->flush_interval) == 0 && *should_run) {
+            // Time how long this takes
+            struct timeval start, end;
+            gettimeofday(&start, NULL);
+
             // List all the sets
             syslog(LOG_INFO, "Scheduled flush started.");
             hlld_set_list_head *head;
@@ -105,6 +111,10 @@ static void* flush_thread_main(void *in) {
                 setmgr_flush_set(mgr, node->set_name);
                 node = node->next;
             }
+
+            // Compute the elapsed time
+            gettimeofday(&end, NULL);
+            syslog(LOG_INFO, "Flushed %d sets in %d msecs", head->size, timediff_msec(&start, &end));
 
             // Cleanup
             setmgr_cleanup_list(head);
@@ -128,6 +138,10 @@ static void* unmap_thread_main(void *in) {
         sleep(1);
         setmgr_client_checkpoint(mgr);
         if ((++ticks % config->cold_interval) == 0 && *should_run) {
+            // Time how long this takes
+            struct timeval start, end;
+            gettimeofday(&start, NULL);
+
             // List the cold sets
             syslog(LOG_INFO, "Cold unmap started.");
             hlld_set_list_head *head;
@@ -137,13 +151,16 @@ static void* unmap_thread_main(void *in) {
             }
 
             // Close the sets, save memory
-            syslog(LOG_INFO, "Cold set count: %d", head->size);
             hlld_set_list *node = head->head;
             while (node) {
                 syslog(LOG_DEBUG, "Unmapping set '%s' for being cold.", node->set_name);
                 setmgr_unmap_set(mgr, node->set_name);
                 node = node->next;
             }
+
+            // Compute the elapsed time
+            gettimeofday(&end, NULL);
+            syslog(LOG_INFO, "Unmapped %d sets in %d msecs", head->size, timediff_msec(&start, &end));
 
             // Cleanup
             setmgr_cleanup_list(head);
@@ -152,4 +169,13 @@ static void* unmap_thread_main(void *in) {
     return NULL;
 }
 
+/**
+ * Computes the difference in time in milliseconds
+ * between two timeval structures.
+ */
+static int timediff_msec(struct timeval *t1, struct timeval *t2) {
+    uint64_t micro1 = t1->tv_sec * 1000000 + t1->tv_usec;
+    uint64_t micro2= t2->tv_sec * 1000000 + t2->tv_usec;
+    return (micro2-micro1) / 1000;
+}
 
