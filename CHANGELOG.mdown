@@ -1,3 +1,14 @@
+# 0.2.3
+
+  * Reduce various messages from INFO to DEBUG level
+  * Change default log level to INFO. Previously, syslog would
+    be overwhelmed by the amount of logging messages.
+  * Provide timing info for all the flush and unmap operations as INFO level
+    message, instead of per-set info at DEBUG level
+  * Improve thread safety in some cases where a set may be unmapped
+    while being used
+  * Git SHA: f3d9de2
+
 # 0.2.2
 
   * Fixed bugs involving sets with very long common prefixes
