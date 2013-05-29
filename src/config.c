@@ -20,8 +20,8 @@ static const hlld_config DEFAULT_CONFIG = {
     4553,               // TCP defaults to 8673
     4554,               // UDP on 8674
     "/tmp/hlld",        // Tmp data dir, until configured
-    "DEBUG",            // DEBUG level
-    LOG_DEBUG,
+    "INFO",             // INFO level
+    LOG_INFO,
     .01625,             // Default 1.625% error == precision 12
     12,                 // Default 12 precision (4096 registers)
     60,                 // Flush once a minute
