@@ -20,6 +20,7 @@ typedef struct hlld_set_list {
 typedef struct {
    int size;
    hlld_set_list *head;
+   hlld_set_list *tail;
 } hlld_set_list_head;
 
 /**
