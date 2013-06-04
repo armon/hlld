@@ -133,6 +133,10 @@ int init_set_manager(hlld_config *config, hlld_setmgr **mgr) {
     pthread_mutex_init(&m->write_lock, NULL);
     INIT_HLLD_SPIN(&m->clients_lock);
 
+    // Initialize the versions
+    m->vsn = 1;
+    m->primary_vsn = 0;
+
     // Allocate storage for the art trees
     art_tree *trees = calloc(2, sizeof(art_tree));
     m->set_map = trees;
@@ -522,10 +526,32 @@ int setmgr_list_sets(hlld_setmgr *mgr, char *prefix, hlld_set_list_head **head) 
     hlld_set_list_head *h = *head = calloc(1, sizeof(hlld_set_list_head));
 
     // Check if we should use the prefix
-    if (prefix)
-        art_iter_prefix(mgr->set_map, prefix, strlen(prefix), set_map_list_cb, h);
-    else
+    int prefix_len = 0;
+    if (prefix) {
+        prefix_len = strlen(prefix);
+        art_iter_prefix(mgr->set_map, prefix, prefix_len, set_map_list_cb, h);
+    } else
         art_iter(mgr->set_map, set_map_list_cb, h);
+
+    // Joy... we have to potentially handle the delta updates
+    if (mgr->primary_vsn + 1 == mgr->vsn) return 0;
+
+    set_list *current = mgr->delta;
+    hlld_set_wrapper *s;
+    while (current) {
+        // Check if this is a match (potential prefix)
+        s = current->set;
+        if (!prefix_len || !strncmp(s->set->set_name, prefix, prefix_len)) {
+            s = current->set;
+            set_map_list_cb(h, s->set->set_name, 0, s);
+        }
+
+        // Don't seek past what the primary set map incorporates
+        if (current->vsn == mgr->primary_vsn + 1)
+            break;
+        current = current->next;
+    }
+
     return 0;
 }
 
@@ -542,7 +568,8 @@ int setmgr_list_cold_sets(hlld_setmgr *mgr, hlld_set_list_head **head) {
     // Allocate the head of a new hashmap
     hlld_set_list_head *h = *head = calloc(1, sizeof(hlld_set_list_head));
 
-    // Scan for the cold sets
+    // Scan for the cold sets. Ignore deltas, since they are either
+    // new (e.g. hot), or being deleted anyways.
     art_iter(mgr->set_map, set_map_list_cold_cb, h);
     return 0;
 }
@@ -593,7 +620,7 @@ static hlld_set_wrapper* find_set(hlld_setmgr *mgr, char *set_name) {
     if (set) return set;
 
     // Check if the primary has all delta changes
-    if (mgr->primary_vsn == mgr->vsn - 1) return NULL;
+    if (mgr->primary_vsn + 1 == mgr->vsn) return NULL;
 
     // Search the delta list
     set_list *current = mgr->delta;
@@ -604,7 +631,7 @@ static hlld_set_wrapper* find_set(hlld_setmgr *mgr, char *set_name) {
         }
 
         // Don't seek past what the primary set map incorporates
-        if (current->vsn == mgr->primary_vsn+1)
+        if (current->vsn == mgr->primary_vsn + 1)
             break;
         current = current->next;
     }
@@ -966,7 +993,7 @@ static void* setmgr_thread_main(void *in) {
         merge_old_versions(mgr, min_vsn);
 
         // Swap the maps, get the swap version
-        unsigned long long swap_vsn = swap_set_maps(mgr, min_vsn);
+        unsigned long long swap_vsn = swap_set_maps(mgr, min_vsn - 1);
 
         /**
          * Before updating the other tree, we need all the clients
