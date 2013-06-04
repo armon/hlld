@@ -42,6 +42,12 @@ static conn_cmd_type determine_client_command(char *cmd_buf, int buf_len, char *
 
 static int buffer_after_terminator(char *buf, int buf_len, char terminator, char **after_term, int *after_len);
 
+// Simple struct to hold data for a callback
+typedef struct {
+    hlld_setmgr *mgr;
+    char **output;
+} set_cb_data;
+
 /**
  * Invoked to initialize the conn handler layer.
  */
@@ -360,14 +366,20 @@ static void handle_clear_cmd(hlld_conn_handler *handle, char *args, int args_len
 // line for each set. We hold a set handle which we
 // can use to get some info about it
 static void list_set_cb(void *data, char *set_name, hlld_set *set) {
-    char **out = data;
+    set_cb_data *cb_data = data;
     int res;
-    res = asprintf(out, "%s %f %u %llu %llu\n",
+
+    // Use the last flush size, attempt to get the latest size.
+    // We do this in-case a list is at the same time as a unmap/delete.
+    uint64_t estimate = set->set_config.size;
+    setmgr_set_size(cb_data->mgr, set_name, &estimate);
+
+    res = asprintf(cb_data->output, "%s %f %u %llu %llu\n",
             set_name,
             set->set_config.default_eps,
             set->set_config.default_precision,
             (long long unsigned)hset_byte_size(set),
-            (long long unsigned)hset_size(set));
+            (long long unsigned)estimate);
     assert(res != -1);
 }
 
@@ -396,8 +408,9 @@ static void handle_list_cmd(hlld_conn_handler *handle, char *args, int args_len)
     // Generate the responses
     char *resp;
     hlld_set_list *node = head->head;
+    set_cb_data cb_data = {handle->mgr, &resp};
     for (int i=0; i < head->size; i++) {
-        res = setmgr_set_cb(handle->mgr, node->set_name, list_set_cb, &resp);
+        res = setmgr_set_cb(handle->mgr, node->set_name, list_set_cb, &cb_data);
         if (res == 0) {
             output_bufs[i+1] = resp;
             output_bufs_len[i+1] = strlen(resp);
@@ -424,19 +437,21 @@ static void handle_list_cmd(hlld_conn_handler *handle, char *args, int args_len)
 // can use to get some info about it
 static void info_set_cb(void *data, char *set_name, hlld_set *set) {
     (void)set_name;
+    set_cb_data *cb_data = data;
 
-    // Cast the intput
-    char **out = data;
+    // Use the last flush size, attempt to get the latest size.
+    // We do this in-case a list is at the same time as a unmap/delete.
+    uint64_t size = set->set_config.size;
+    setmgr_set_size(cb_data->mgr, set_name, &size);
 
     // Get some metrics
     set_counters *counters = hset_counters(set);
     uint64_t storage = hset_byte_size(set);
-    uint64_t size = hset_size(set);
     uint64_t sets = counters->sets;
 
     // Generate a formatted string output
     int res;
-    res = asprintf(out, "in_memory %d\n\
+    res = asprintf(cb_data->output, "in_memory %d\n\
 page_ins %llu\n\
 page_outs %llu\n\
 epsilon %f\n\
@@ -475,7 +490,8 @@ static void handle_info_cmd(hlld_conn_handler *handle, char *args, int args_len)
     int lens[] = {START_RESP_LEN, 0, END_RESP_LEN};
 
     // Invoke the callback to get the set stats
-    int res = setmgr_set_cb(handle->mgr, args, info_set_cb, &output[1]);
+    set_cb_data cb_data = {handle->mgr, &output[1]};
+    int res = setmgr_set_cb(handle->mgr, args, info_set_cb, &cb_data);
 
     // Check for no set
     if (res != 0) {
