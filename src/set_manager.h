@@ -26,10 +26,12 @@ typedef struct {
 /**
  * Initializer
  * @arg config The configuration
+ * @arg vacuum Should vacuuming be enabled. True unless in a
+ * test or embedded environment using setmgr_vacuum()
  * @arg mgr Output, resulting manager.
  * @return 0 on success.
  */
-int init_set_manager(hlld_config *config, hlld_setmgr **mgr);
+int init_set_manager(hlld_config *config, int vacuum, hlld_setmgr **mgr);
 
 /**
  * Cleanup

@@ -18,7 +18,7 @@ START_TEST(test_mgr_init_destroy)
     fail_unless(res == 0);
 
     hlld_setmgr *mgr;
-    res = init_set_manager(&config, &mgr);
+    res = init_set_manager(&config, 0, &mgr);
     fail_unless(res == 0);
 
     res = destroy_set_manager(mgr);
@@ -33,7 +33,7 @@ START_TEST(test_mgr_create_drop)
     fail_unless(res == 0);
 
     hlld_setmgr *mgr;
-    res = init_set_manager(&config, &mgr);
+    res = init_set_manager(&config, 0, &mgr);
     fail_unless(res == 0);
 
     res = setmgr_create_set(mgr, "foo1", NULL);
@@ -54,7 +54,7 @@ START_TEST(test_mgr_create_double_drop)
     fail_unless(res == 0);
 
     hlld_setmgr *mgr;
-    res = init_set_manager(&config, &mgr);
+    res = init_set_manager(&config, 0, &mgr);
     fail_unless(res == 0);
 
     res = setmgr_create_set(mgr, "dub1", NULL);
@@ -78,7 +78,7 @@ START_TEST(test_mgr_list)
     fail_unless(res == 0);
 
     hlld_setmgr *mgr;
-    res = init_set_manager(&config, &mgr);
+    res = init_set_manager(&config, 0, &mgr);
     fail_unless(res == 0);
 
     res = setmgr_create_set(mgr, "bar1", NULL);
@@ -124,7 +124,7 @@ START_TEST(test_mgr_list_prefix)
     fail_unless(res == 0);
 
     hlld_setmgr *mgr;
-    res = init_set_manager(&config, &mgr);
+    res = init_set_manager(&config, 0, &mgr);
     fail_unless(res == 0);
 
     res = setmgr_create_set(mgr, "bar1", NULL);
@@ -175,7 +175,7 @@ START_TEST(test_mgr_list_no_sets)
     fail_unless(res == 0);
 
     hlld_setmgr *mgr;
-    res = init_set_manager(&config, &mgr);
+    res = init_set_manager(&config, 0, &mgr);
     fail_unless(res == 0);
 
     hlld_set_list_head *head;
@@ -197,7 +197,7 @@ START_TEST(test_mgr_add_keys)
     fail_unless(res == 0);
 
     hlld_setmgr *mgr;
-    res = init_set_manager(&config, &mgr);
+    res = init_set_manager(&config, 0, &mgr);
     fail_unless(res == 0);
 
     res = setmgr_create_set(mgr, "zab1", NULL);
@@ -222,7 +222,7 @@ START_TEST(test_mgr_add_no_set)
     fail_unless(res == 0);
 
     hlld_setmgr *mgr;
-    res = init_set_manager(&config, &mgr);
+    res = init_set_manager(&config, 0, &mgr);
     fail_unless(res == 0);
 
     char *keys[] = {"hey","there","person"};
@@ -242,7 +242,7 @@ START_TEST(test_mgr_flush_no_set)
     fail_unless(res == 0);
 
     hlld_setmgr *mgr;
-    res = init_set_manager(&config, &mgr);
+    res = init_set_manager(&config, 0, &mgr);
     fail_unless(res == 0);
 
     res = setmgr_flush_set(mgr, "noop1");
@@ -260,7 +260,7 @@ START_TEST(test_mgr_flush)
     fail_unless(res == 0);
 
     hlld_setmgr *mgr;
-    res = init_set_manager(&config, &mgr);
+    res = init_set_manager(&config, 0, &mgr);
     fail_unless(res == 0);
 
     res = setmgr_create_set(mgr, "zab3", NULL);
@@ -285,7 +285,7 @@ START_TEST(test_mgr_unmap_no_set)
     fail_unless(res == 0);
 
     hlld_setmgr *mgr;
-    res = init_set_manager(&config, &mgr);
+    res = init_set_manager(&config, 0, &mgr);
     fail_unless(res == 0);
 
     res = setmgr_unmap_set(mgr, "noop2");
@@ -303,7 +303,7 @@ START_TEST(test_mgr_unmap)
     fail_unless(res == 0);
 
     hlld_setmgr *mgr;
-    res = init_set_manager(&config, &mgr);
+    res = init_set_manager(&config, 0, &mgr);
     fail_unless(res == 0);
 
     res = setmgr_create_set(mgr, "zab4", NULL);
@@ -327,7 +327,7 @@ START_TEST(test_mgr_unmap_add_keys)
     fail_unless(res == 0);
 
     hlld_setmgr *mgr;
-    res = init_set_manager(&config, &mgr);
+    res = init_set_manager(&config, 0, &mgr);
     fail_unless(res == 0);
 
     res = setmgr_create_set(mgr, "zab5", NULL);
@@ -357,7 +357,7 @@ START_TEST(test_mgr_clear_no_set)
     fail_unless(res == 0);
 
     hlld_setmgr *mgr;
-    res = init_set_manager(&config, &mgr);
+    res = init_set_manager(&config, 0, &mgr);
     fail_unless(res == 0);
 
     res = setmgr_clear_set(mgr, "noop2");
@@ -375,7 +375,7 @@ START_TEST(test_mgr_clear_not_proxied)
     fail_unless(res == 0);
 
     hlld_setmgr *mgr;
-    res = init_set_manager(&config, &mgr);
+    res = init_set_manager(&config, 0, &mgr);
     fail_unless(res == 0);
 
     res = setmgr_create_set(mgr, "dub1", NULL);
@@ -400,7 +400,7 @@ START_TEST(test_mgr_clear)
     fail_unless(res == 0);
 
     hlld_setmgr *mgr;
-    res = init_set_manager(&config, &mgr);
+    res = init_set_manager(&config, 0, &mgr);
     fail_unless(res == 0);
 
     res = setmgr_create_set(mgr, "dub2", NULL);
@@ -434,7 +434,7 @@ START_TEST(test_mgr_clear_reload)
     fail_unless(res == 0);
 
     hlld_setmgr *mgr;
-    res = init_set_manager(&config, &mgr);
+    res = init_set_manager(&config, 0, &mgr);
     fail_unless(res == 0);
 
     res = setmgr_create_set(mgr, "zab9", NULL);
@@ -480,7 +480,7 @@ START_TEST(test_mgr_list_cold_no_sets)
     fail_unless(res == 0);
 
     hlld_setmgr *mgr;
-    res = init_set_manager(&config, &mgr);
+    res = init_set_manager(&config, 0, &mgr);
     fail_unless(res == 0);
 
     hlld_set_list_head *head;
@@ -501,13 +501,16 @@ START_TEST(test_mgr_list_cold)
     fail_unless(res == 0);
 
     hlld_setmgr *mgr;
-    res = init_set_manager(&config, &mgr);
+    res = init_set_manager(&config, 0, &mgr);
     fail_unless(res == 0);
 
     res = setmgr_create_set(mgr, "zab6", NULL);
     fail_unless(res == 0);
     res = setmgr_create_set(mgr, "zab7", NULL);
     fail_unless(res == 0);
+
+    // Force vacuum so that these are noticed by the cold list
+    setmgr_vacuum(mgr);
 
     hlld_set_list_head *head;
     res = setmgr_list_cold_sets(mgr, &head);
@@ -558,7 +561,7 @@ START_TEST(test_mgr_unmap_in_mem)
     config.in_memory = 1;
 
     hlld_setmgr *mgr;
-    res = init_set_manager(&config, &mgr);
+    res = init_set_manager(&config, 0, &mgr);
     fail_unless(res == 0);
 
     res = setmgr_create_set(mgr, "mem1", NULL);
@@ -594,7 +597,7 @@ START_TEST(test_mgr_create_custom_config)
     fail_unless(res == 0);
 
     hlld_setmgr *mgr;
-    res = init_set_manager(&config, &mgr);
+    res = init_set_manager(&config, 0, &mgr);
     fail_unless(res == 0);
 
     // Custom config
@@ -622,7 +625,7 @@ START_TEST(test_mgr_restore)
     fail_unless(res == 0);
 
     hlld_setmgr *mgr;
-    res = init_set_manager(&config, &mgr);
+    res = init_set_manager(&config, 0, &mgr);
     fail_unless(res == 0);
 
     res = setmgr_create_set(mgr, "zab8", NULL);
@@ -637,7 +640,7 @@ START_TEST(test_mgr_restore)
     fail_unless(res == 0);
 
    // Restrore
-    res = init_set_manager(&config, &mgr);
+    res = init_set_manager(&config, 0, &mgr);
     fail_unless(res == 0);
 
     // Try to check keys now
@@ -669,7 +672,7 @@ START_TEST(test_mgr_callback)
     config.in_memory = 1;
 
     hlld_setmgr *mgr;
-    res = init_set_manager(&config, &mgr);
+    res = init_set_manager(&config, 0, &mgr);
     fail_unless(res == 0);
 
     res = setmgr_create_set(mgr, "cb1", NULL);

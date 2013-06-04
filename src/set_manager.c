@@ -119,10 +119,12 @@ static void* setmgr_thread_main(void *in);
 /**
  * Initializer
  * @arg config The configuration
+ * @arg vacuum Should vacuuming be enabled. True unless in a
+ * test or embedded environment using setmgr_vacuum()
  * @arg mgr Output, resulting manager.
  * @return 0 on success.
  */
-int init_set_manager(hlld_config *config, hlld_setmgr **mgr) {
+int init_set_manager(hlld_config *config, int vacuum, hlld_setmgr **mgr) {
     // Allocate a new object
     hlld_setmgr *m = *mgr = calloc(1, sizeof(hlld_setmgr));
 
@@ -162,8 +164,8 @@ int init_set_manager(hlld_config *config, hlld_setmgr **mgr) {
     }
 
     // Start the vacuum thread
-    m->should_run = 1;
-    if (pthread_create(&m->vacuum_thread, NULL, setmgr_thread_main, m)) {
+    m->should_run = vacuum;
+    if (vacuum && pthread_create(&m->vacuum_thread, NULL, setmgr_thread_main, m)) {
         perror("Failed to start vacuum thread!");
         destroy_set_manager(m);
         return 1;

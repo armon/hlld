@@ -153,7 +153,7 @@ int main(int argc, char **argv) {
 
     // Initialize the sets
     hlld_setmgr *mgr;
-    int mgr_res = init_set_manager(config, &mgr);
+    int mgr_res = init_set_manager(config, 1,  &mgr);
     if (mgr_res != 0) {
         syslog(LOG_ERR, "Failed to initialize hlld set manager!");
         return 1;
