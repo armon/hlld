@@ -26,26 +26,6 @@ typedef struct {
 } hlld_set_wrapper;
 
 /**
- * We use a linked list of setmgr_vsn structs
- * as a simple form of Multi-Version Concurrency Controll (MVCC).
- * The latest version is always the head of the list, and older
- * versions are maintained as a linked list. A separate vacuum thread
- * is used to clean out the old version. This allows reads against the
- * head to be non-blocking.
- */
-typedef struct setmgr_vsn {
-    unsigned long long vsn;
-
-    // Maps key names -> hlld_set_wrapper
-    art_tree set_map;
-
-    // Holds a reference to the deleted set, since
-    // it is no longer in the hash map
-    hlld_set_wrapper *deleted;
-    struct setmgr_vsn *prev;
-} setmgr_vsn;
-
-/**
  * We use a linked list of setmgr_client
  * structs to track any clients of the set manager.
  * Each client maintains a thread ID as well as the
@@ -59,14 +39,35 @@ typedef struct setmgr_client {
     struct setmgr_client *next;
 } setmgr_client;
 
+// Simple linked list of set wrappers
+typedef struct set_list {
+    unsigned long long vsn;
+    char create;        // Is this a create or delete?
+    hlld_set_wrapper *set;
+    struct set_list *next;
+} set_list;
+
+/**
+ * We use a a simple form of Multi-Version Concurrency Controll (MVCC)
+ * to prevent locking on access to the map of set name -> hlld_set_wrapper.
+ *
+ * The way it works is we have 2 ART trees, the "primary" and an alternate.
+ * All the clients of the set manager have reads go through the primary
+ * without any locking. We also maintain a delta list of new and deleted sets,
+ * which is a simple linked list.
+ *
+ * We use a separate vacuum thread to merge changes from the delta lists
+ * into the alternate tree, and then do a pointer swap to rotate the
+ * primary tree for the alternate.
+ *
+ * This mechanism ensures we have at most 2 ART trees, reads are lock-free,
+ * and performance does not degrade with the number of sets.
+ *
+ */
 struct hlld_setmgr {
     hlld_config *config;
 
-    setmgr_vsn *latest;
-    pthread_mutex_t write_lock; // Serializes destructive operations
-    pthread_mutex_t vacuum_lock; // Held while vacuum is happening
-
-    volatile int should_run;  // Used to stop the vacuum thread
+    int should_run;  // Used to stop the vacuum thread
     pthread_t vacuum_thread;
 
     /*
@@ -78,6 +79,19 @@ struct hlld_setmgr {
      */
     setmgr_client *clients;
     hlld_spinlock clients_lock;
+
+    // This is the current version. Should be used
+    // under the write lock.
+    unsigned long long vsn;
+    pthread_mutex_t write_lock; // Serializes destructive operations
+
+    // Maps key names -> hlld_set_wrapper
+    unsigned long long primary_vsn; // This is the version that set_map represents
+    art_tree *set_map;
+    art_tree *alt_set_map;
+
+    // Delta lists for non-merged operations
+    set_list *delta;
 };
 
 /**
@@ -92,15 +106,14 @@ struct hlld_setmgr {
 static const char FOLDER_PREFIX[] = "hlld.";
 static const int FOLDER_PREFIX_LEN = sizeof(FOLDER_PREFIX) - 1;
 
-static hlld_set_wrapper* take_set(setmgr_vsn *vsn, char *set_name);
+static hlld_set_wrapper* find_set(hlld_setmgr *mgr, char *set_name);
+static hlld_set_wrapper* take_set(hlld_setmgr *mgr, char *set_name);
 static void delete_set(hlld_set_wrapper *set);
-static int add_set(hlld_setmgr *mgr, setmgr_vsn *vsn, char *set_name, hlld_config *config, int is_hot);
+static int add_set(hlld_setmgr *mgr, char *set_name, hlld_config *config, int is_hot, int delta);
 static int set_map_list_cb(void *data, const char *key, uint32_t key_len, void *value);
 static int set_map_list_cold_cb(void *data, const char *key, uint32_t key_len, void *value);
 static int set_map_delete_cb(void *data, const char *key, uint32_t key_len, void *value);
 static int load_existing_sets(hlld_setmgr *mgr);
-static setmgr_vsn* create_new_version(hlld_setmgr *mgr);
-static void destroy_version(setmgr_vsn *vsn);
 static void* setmgr_thread_main(void *in);
 
 /**
@@ -118,13 +131,15 @@ int init_set_manager(hlld_config *config, hlld_setmgr **mgr) {
 
     // Initialize the locks
     pthread_mutex_init(&m->write_lock, NULL);
-    pthread_mutex_init(&m->vacuum_lock, NULL);
     INIT_HLLD_SPIN(&m->clients_lock);
 
-    // Allocate the initial version and hash table
-    setmgr_vsn *vsn = calloc(1, sizeof(setmgr_vsn));
-    m->latest = vsn;
-    int res = init_art_tree(&vsn->set_map);
+    // Allocate storage for the art trees
+    art_tree *trees = calloc(2, sizeof(art_tree));
+    m->set_map = trees;
+    m->alt_set_map = trees+1;
+
+    // Allocate the initial art tree
+    int res = init_art_tree(m->set_map);
     if (res) {
         syslog(LOG_ERR, "Failed to allocate set map!");
         free(m);
@@ -133,6 +148,14 @@ int init_set_manager(hlld_config *config, hlld_setmgr **mgr) {
 
     // Discover existing sets
     load_existing_sets(m);
+
+    // Initialize the alternate map
+    res = art_copy(m->alt_set_map, m->set_map);
+    if (res) {
+        syslog(LOG_ERR, "Failed to copy set map to alternate!");
+        destroy_set_manager(m);
+        return -1;
+    }
 
     // Start the vacuum thread
     m->should_run = 1;
@@ -156,18 +179,19 @@ int destroy_set_manager(hlld_setmgr *mgr) {
     mgr->should_run = 0;
     if (mgr->vacuum_thread) pthread_join(mgr->vacuum_thread, NULL);
 
-    // Nuke all the keys in the current version
-    setmgr_vsn *current = mgr->latest;
-    art_iter(&current->set_map, set_map_delete_cb, mgr);
+    // Nuke all the keys in the current version.
+    art_iter(mgr->set_map, set_map_delete_cb, mgr);
 
-    // Destroy the versions
-    setmgr_vsn *next, *vsn = mgr->latest;
-    while (vsn) {
-        // Handle any lingering deletes
-        if (vsn->deleted) delete_set(vsn->deleted);
-        next = vsn->prev;
-        destroy_version(vsn);
-        vsn = next;
+    // Handle any delta operations
+    set_list *next, *current = mgr->delta;
+    while (current) {
+        // Only delete pending creates, pending
+        // deletes are still in the primary tree
+        if (current->create)
+            delete_set(current->set);
+        next = current->next;
+        free(current);
+        current = next;
     }
 
     // Free the clients
@@ -177,6 +201,14 @@ int destroy_set_manager(hlld_setmgr *mgr) {
         free(cl);
         cl = cl_next;
     }
+
+    // Destroy the ART trees
+    destroy_art_tree(mgr->set_map);
+    destroy_art_tree(mgr->alt_set_map);
+    if (mgr->set_map < mgr->alt_set_map)
+        free(mgr->set_map);
+    else
+        free(mgr->alt_set_map);
 
     // Free the manager
     free(mgr);
@@ -200,7 +232,7 @@ void setmgr_client_checkpoint(hlld_setmgr *mgr) {
     setmgr_client *cl = mgr->clients;
     while (cl) {
         if (cl->id == id) {
-            cl->vsn = mgr->latest->vsn;
+            cl->vsn = mgr->vsn;
             return;
         }
         cl = cl->next;
@@ -210,7 +242,7 @@ void setmgr_client_checkpoint(hlld_setmgr *mgr) {
     // so we need to safely add ourself
     cl = malloc(sizeof(setmgr_client));
     cl->id = id;
-    cl->vsn = mgr->latest->vsn;
+    cl->vsn = mgr->vsn;
 
     // Critical section for the flip
     LOCK_HLLD_SPIN(&mgr->clients_lock);
@@ -260,8 +292,7 @@ void setmgr_client_leave(hlld_setmgr *mgr) {
  */
 int setmgr_flush_set(hlld_setmgr *mgr, char *set_name) {
     // Get the set
-    setmgr_vsn *current = mgr->latest;
-    hlld_set_wrapper *set = take_set(current, set_name);
+    hlld_set_wrapper *set = take_set(mgr, set_name);
     if (!set) return -1;
 
     // Acquire the READ lock. We use the read lock
@@ -287,8 +318,7 @@ int setmgr_flush_set(hlld_setmgr *mgr, char *set_name) {
  */
 int setmgr_set_keys(hlld_setmgr *mgr, char *set_name, char **keys, int num_keys) {
     // Get the set
-    setmgr_vsn *current = mgr->latest;
-    hlld_set_wrapper *set = take_set(current, set_name);
+    hlld_set_wrapper *set = take_set(mgr, set_name);
     if (!set) return -1;
 
     // Acquire the READ lock. We use the read lock
@@ -318,8 +348,7 @@ int setmgr_set_keys(hlld_setmgr *mgr, char *set_name, char **keys, int num_keys)
  */
 int setmgr_set_size(hlld_setmgr *mgr, char *set_name, uint64_t *est) {
     // Get the set
-    setmgr_vsn *current = mgr->latest;
-    hlld_set_wrapper *set = take_set(current, set_name);
+    hlld_set_wrapper *set = take_set(mgr, set_name);
     if (!set) return -1;
 
     // Acquire the READ lock. We use the read lock
@@ -328,9 +357,6 @@ int setmgr_set_size(hlld_setmgr *mgr, char *set_name, uint64_t *est) {
 
     // Get the size
     *est = hset_size(set->set);
-
-    // Mark as hot
-    set->is_hot = 1;
 
     // Release the lock
     pthread_rwlock_unlock(&set->rwlock);
@@ -348,43 +374,24 @@ int setmgr_create_set(hlld_setmgr *mgr, char *set_name, hlld_config *custom_conf
     // Lock the creation
     pthread_mutex_lock(&mgr->write_lock);
 
-    // Bail if the set already exists
-    hlld_set_wrapper *set = NULL;
-    setmgr_vsn *latest = mgr->latest;
-    set = art_search(&latest->set_map, set_name, strlen(set_name)+1);
+    /*
+     * Bail if the set already exists.
+     * -1 if the set is active
+     * -3 if delete is pending
+     */
+    hlld_set_wrapper *set = find_set(mgr, set_name);
     if (set) {
         pthread_mutex_unlock(&mgr->write_lock);
-        return -1;
+        return (set->is_active) ? -1 : -3;
     }
-
-    // Scan for a pending delete
-    pthread_mutex_lock(&mgr->vacuum_lock);
-    setmgr_vsn *vsn = mgr->latest->prev;
-    while (vsn) {
-        if (vsn->deleted && strcmp(vsn->deleted->set->set_name, set_name) == 0) {
-            syslog(LOG_WARNING, "Tried to create set '%s' with a pending delete!", set_name);
-            pthread_mutex_unlock(&mgr->vacuum_lock);
-            pthread_mutex_unlock(&mgr->write_lock);
-            return -3;
-        }
-        vsn = vsn->prev;
-    }
-    pthread_mutex_unlock(&mgr->vacuum_lock);
-
-    // Create a new version
-    setmgr_vsn *new_vsn = create_new_version(mgr);
 
     // Use a custom config if provided, else the default
     hlld_config *config = (custom_config) ? custom_config : mgr->config;
 
-    // Add the set to the new version
-    int res = add_set(mgr, new_vsn, set_name, config, 1);
-    if (res != 0) {
-        destroy_version(new_vsn);
+    // Add the set
+    int res = add_set(mgr, set_name, config, 1, 1);
+    if (res) {
         res = -2; // Internal error
-    } else {
-        // Install the new version
-        mgr->latest = new_vsn;
     }
 
     // Release the lock
@@ -403,8 +410,7 @@ int setmgr_drop_set(hlld_setmgr *mgr, char *set_name) {
     pthread_mutex_lock(&mgr->write_lock);
 
     // Get the set
-    setmgr_vsn *current = mgr->latest;
-    hlld_set_wrapper *set = take_set(current, set_name);
+    hlld_set_wrapper *set = take_set(mgr, set_name);
     if (!set) {
         pthread_mutex_unlock(&mgr->write_lock);
         return -1;
@@ -414,18 +420,64 @@ int setmgr_drop_set(hlld_setmgr *mgr, char *set_name) {
     set->is_active = 0;
     set->should_delete = 1;
 
-    // Create a new version without this set
-    setmgr_vsn *new_vsn = create_new_version(mgr);
-    art_delete(&new_vsn->set_map, set_name, strlen(set_name)+1);
-    current->deleted = set;
-
-    // Install the new version
-    mgr->latest = new_vsn;
+    // Create a delta entry
+    set_list *delta = malloc(sizeof(set_list));
+    delta->vsn = mgr->vsn;
+    delta->create = 0;
+    delta->set = set;
+    delta->next = mgr->delta;
+    mgr->delta = delta;
+    mgr->vsn++;
 
     // Unlock
     pthread_mutex_unlock(&mgr->write_lock);
     return 0;
 }
+
+
+/**
+ * Clears the set from the internal data stores. This can only
+ * be performed if the set is proxied.
+ * @arg set_name The name of the set to delete
+ * @return 0 on success, -1 if the set does not exist, -2
+ * if the set is not proxied.
+ */
+int setmgr_clear_set(hlld_setmgr *mgr, char *set_name) {
+    // Lock the deletion
+    pthread_mutex_lock(&mgr->write_lock);
+
+    // Get the set
+    hlld_set_wrapper *set = take_set(mgr, set_name);
+    if (!set) {
+        pthread_mutex_unlock(&mgr->write_lock);
+        return -1;
+    }
+
+    // Check if the set is proxied
+    if (!hset_is_proxied(set->set)) {
+        pthread_mutex_unlock(&mgr->write_lock);
+        return -2;
+    }
+
+    // This is critical, as it prevents it from
+    // being deleted. Instead, it is merely closed.
+    set->is_active = 0;
+    set->should_delete = 0;
+
+    // Create a delta entry
+    set_list *delta = malloc(sizeof(set_list));
+    delta->vsn = mgr->vsn;
+    delta->create = 0;
+    delta->set = set;
+    delta->next = mgr->delta;
+    mgr->delta = delta;
+    mgr->vsn++;
+
+    // Unlock
+    pthread_mutex_unlock(&mgr->write_lock);
+    return 0;
+}
+
 
 /**
  * Unmaps the set from memory, but leaves it
@@ -438,8 +490,7 @@ int setmgr_drop_set(hlld_setmgr *mgr, char *set_name) {
  */
 int setmgr_unmap_set(hlld_setmgr *mgr, char *set_name) {
     // Get the set
-    setmgr_vsn *current = mgr->latest;
-    hlld_set_wrapper *set = take_set(current, set_name);
+    hlld_set_wrapper *set = take_set(mgr, set_name);
     if (!set) return -1;
 
     // Only do it if we are not in memory
@@ -459,50 +510,6 @@ int setmgr_unmap_set(hlld_setmgr *mgr, char *set_name) {
 
 
 /**
- * Clears the set from the internal data stores. This can only
- * be performed if the set is proxied.
- * @arg set_name The name of the set to delete
- * @return 0 on success, -1 if the set does not exist, -2
- * if the set is not proxied.
- */
-int setmgr_clear_set(hlld_setmgr *mgr, char *set_name) {
-    // Lock the deletion
-    pthread_mutex_lock(&mgr->write_lock);
-
-    // Get the set
-    setmgr_vsn *current = mgr->latest;
-    hlld_set_wrapper *set = take_set(current, set_name);
-    if (!set) {
-        pthread_mutex_unlock(&mgr->write_lock);
-        return -1;
-    }
-
-    // Check if the set is proxied
-    if (!hset_is_proxied(set->set)) {
-        pthread_mutex_unlock(&mgr->write_lock);
-        return -2;
-    }
-
-    // This is critical, as it prevents it from
-    // being deleted. Instead, it is merely closed.
-    set->is_active = 0;
-    set->should_delete = 0;
-
-    // Create a new version without this set
-    setmgr_vsn *new_vsn = create_new_version(mgr);
-    art_delete(&new_vsn->set_map, set_name, strlen(set_name)+1);
-    current->deleted = set;
-
-    // Install the new version
-    mgr->latest = new_vsn;
-
-    // Unlock
-    pthread_mutex_unlock(&mgr->write_lock);
-    return 0;
-}
-
-
-/**
  * Allocates space for and returns a linked
  * list of all the sets.
  * @arg mgr The manager to list from
@@ -514,14 +521,11 @@ int setmgr_list_sets(hlld_setmgr *mgr, char *prefix, hlld_set_list_head **head) 
     // Allocate the head
     hlld_set_list_head *h = *head = calloc(1, sizeof(hlld_set_list_head));
 
-    // Iterate through a callback to append
-    setmgr_vsn *current = mgr->latest;
-
     // Check if we should use the prefix
     if (prefix)
-        art_iter_prefix(&current->set_map, prefix, strlen(prefix), set_map_list_cb, h);
+        art_iter_prefix(mgr->set_map, prefix, strlen(prefix), set_map_list_cb, h);
     else
-        art_iter(&current->set_map, set_map_list_cb, h);
+        art_iter(mgr->set_map, set_map_list_cb, h);
     return 0;
 }
 
@@ -539,8 +543,7 @@ int setmgr_list_cold_sets(hlld_setmgr *mgr, hlld_set_list_head **head) {
     hlld_set_list_head *h = *head = calloc(1, sizeof(hlld_set_list_head));
 
     // Scan for the cold sets
-    setmgr_vsn *current = mgr->latest;
-    art_iter(&current->set_map, set_map_list_cold_cb, h);
+    art_iter(mgr->set_map, set_map_list_cold_cb, h);
     return 0;
 }
 
@@ -555,20 +558,11 @@ int setmgr_list_cold_sets(hlld_setmgr *mgr, hlld_set_list_head **head) {
  */
 int setmgr_set_cb(hlld_setmgr *mgr, char *set_name, set_cb cb, void* data) {
     // Get the set
-    setmgr_vsn *current = mgr->latest;
-    hlld_set_wrapper *set = take_set(current, set_name);
+    hlld_set_wrapper *set = take_set(mgr, set_name);
     if (!set) return -1;
-
-    // Acquire the READ lock. We use the read lock
-    // since clients might inspect the hll, which
-    // should not be cleared in the mean time
-    pthread_rwlock_rdlock(&set->rwlock);
 
     // Callback
     cb(data, set_name, set->set);
-
-    // Release the lock
-    pthread_rwlock_unlock(&set->rwlock);
     return 0;
 }
 
@@ -589,13 +583,44 @@ void setmgr_cleanup_list(hlld_set_list_head *head) {
 
 
 /**
- * Gets the hlld set in a thread safe way.
+ * Searches the primary tree and the delta list for a set
  */
-static hlld_set_wrapper* take_set(setmgr_vsn *vsn, char *set_name) {
-    hlld_set_wrapper *set = art_search(&vsn->set_map, set_name, strlen(set_name)+1);
-    return (set && set->is_active) ? set : NULL;
+static hlld_set_wrapper* find_set(hlld_setmgr *mgr, char *set_name) {
+    // Search the tree first
+    hlld_set_wrapper *set = art_search(mgr->set_map, set_name, strlen(set_name)+1);
+
+    // If we found the set, check if it is active
+    if (set) return set;
+
+    // Check if the primary has all delta changes
+    if (mgr->primary_vsn == mgr->vsn - 1) return NULL;
+
+    // Search the delta list
+    set_list *current = mgr->delta;
+    while (current) {
+        // Check if this is a match
+        if (strcmp(current->set->set->set_name, set_name) == 0) {
+            return current->set;
+        }
+
+        // Don't seek past what the primary set map incorporates
+        if (current->vsn == mgr->primary_vsn+1)
+            break;
+        current = current->next;
+    }
+
+    // Not found
+    return NULL;
 }
 
+
+/**
+ * Gets the hlld set in a thread safe way.
+ */
+static hlld_set_wrapper* take_set(hlld_setmgr *mgr, char *set_name) {
+    hlld_set_wrapper *set = find_set(mgr, set_name);
+    return (set && set->is_active) ? set : NULL;
+}
 
 /**
  * Invoked to cleanup a set once we
@@ -624,13 +649,15 @@ static void delete_set(hlld_set_wrapper *set) {
 /**
  * Creates a new set and adds it to the set set.
  * @arg mgr The manager to add to
- * @arg vsn The version to add to
  * @arg set_name The name of the set
  * @arg config The configuration for the set
  * @arg is_hot Is the set hot. False for existing.
+ * @arg delta Should a delta entry be added, or the primary tree updated.
+ * This is usually 0, except during initialization when it is safe to update
+ * the primary tree.
  * @return 0 on success, -1 on error
  */
-static int add_set(hlld_setmgr *mgr, setmgr_vsn *vsn, char *set_name, hlld_config *config, int is_hot) {
+static int add_set(hlld_setmgr *mgr, char *set_name, hlld_config *config, int is_hot, int delta) {
     // Create the set
     hlld_set_wrapper *set = calloc(1, sizeof(hlld_set_wrapper));
     set->is_active = 1;
@@ -650,8 +677,23 @@ static int add_set(hlld_setmgr *mgr, setmgr_vsn *vsn, char *set_name, hlld_confi
         return -1;
     }
 
-    // Add to the hash map
-    art_insert(&vsn->set_map, set_name, strlen(set_name)+1, set);
+    // Check if we are adding a delta value
+    if (delta) {
+        // Create a delta entry
+        set_list *delta = malloc(sizeof(set_list));
+        delta->vsn = mgr->vsn;
+        delta->set = set;
+        delta->create = 1;
+        delta->next = mgr->delta;
+        mgr->delta = delta;
+        mgr->vsn++;
+
+    // Non-delta update. Usually only for initialization of the tree
+    // at start time, since otherwise this is unsafe.
+    } else {
+        art_insert(mgr->set_map, set_name, strlen(set_name)+1, set);
+    }
+
     return 0;
 }
 
@@ -674,10 +716,18 @@ static int set_map_list_cb(void *data, const char *key, uint32_t key_len, void *
 
     // Setup
     node->set_name = strdup(key);
-    node->next = head->head;
+    node->next = NULL;
 
-    // Inject
-    head->head = node;
+    // Inject at head if first node
+    if (!head->head) {
+        head->head = node;
+        head->tail = node;
+
+    // Inject at tail
+    } else {
+        head->tail->next = node;
+        head->tail = node;
+    }
     head->size++;
     return 0;
 }
@@ -725,12 +775,7 @@ static int set_map_delete_cb(void *data, const char *key, uint32_t key_len, void
     (void)data;
     (void)key;
     (void)key_len;
-
-    // Cast the inputs
     hlld_set_wrapper *set = value;
-
-    // Delete, but not the underlying files
-    set->should_delete = 0;
     delete_set(set);
     return 0;
 }
@@ -776,7 +821,7 @@ static int load_existing_sets(hlld_setmgr *mgr) {
     for (int i=0; i< num; i++) {
         char *folder_name = namelist[i]->d_name;
         char *set_name = folder_name + FOLDER_PREFIX_LEN;
-        if (add_set(mgr, mgr->latest, set_name, mgr->config, 0)) {
+        if (add_set(mgr, set_name, mgr->config, 0, 0)) {
             syslog(LOG_ERR, "Failed to load set '%s'!", set_name);
         }
     }
@@ -787,61 +832,107 @@ static int load_existing_sets(hlld_setmgr *mgr) {
 }
 
 
-/**
- * Creates a new version struct from the current version.
- * Does not install the new version in place. This should
- * be guarded by the write lock to prevent conflicting versions.
+// Handle any delta updates creates. These are applied in reverse order,
+// since creates may be followed by a delete but not the other way around.
+static void apply_delta_updates(hlld_setmgr *mgr, set_list *updates) {
+    // Handle older updates first
+    if (updates->next) apply_delta_updates(mgr, updates->next);
+
+    // Handle current update
+    hlld_set_wrapper *s = updates->set;
+    if (updates->create) {
+        art_insert(mgr->alt_set_map, s->set->set_name, strlen(s->set->set_name)+1, s);
+    }   else {
+        art_delete(mgr->alt_set_map, s->set->set_name, strlen(s->set->set_name)+1);
+    }
+}
+
+
+// Merges changes into the alternate tree from the delta lists
+static int merge_old_versions(hlld_setmgr *mgr, unsigned long long min_vsn) {
+    set_list *current = mgr->delta;
+    while (current) {
+        if (current->vsn < min_vsn) {
+            apply_delta_updates(mgr, current);
+            break;
+        }
+        current = current->next;
+    }
+    return 0;
+}
+
+
+/*
+ * Scans a set_list* until it finds an entry with a version
+ * less than min_vsn. It NULLs the pointer to that version
+ * and returns a pointer to that node.
  */
-static setmgr_vsn* create_new_version(hlld_setmgr *mgr) {
-    // Create a new blank version
-    setmgr_vsn *vsn = calloc(1, sizeof(setmgr_vsn));
-
-    // Increment the version number
-    setmgr_vsn *current = mgr->latest;
-    vsn->vsn = mgr->latest->vsn + 1;
-
-    // Set the previous pointer
-    vsn->prev = current;
-
-    // Initialize the map
-    int res = art_copy(&vsn->set_map, &current->set_map);
-    if (res) {
-        syslog(LOG_ERR, "Failed to copy set map!");
-        free(vsn);
-        return NULL;
+static set_list* delta_versions(set_list *init, set_list **ref, unsigned long long min_vsn) {
+    set_list *current = init;
+    set_list **prev = ref;
+    while (current) {
+        if (current->vsn < min_vsn) {
+            // Set the pointer to this node to NULL
+            *prev = NULL;
+            return current;
+        }
+        prev = &current->next;
+        current = current->next;
     }
-
-    // Return the new version
-    syslog(LOG_DEBUG, "(setmgr) Created new version %llu", vsn->vsn);
-    return vsn;
+    return NULL;
 }
 
-// Destroys a version. Does basic cleanup.
-static void destroy_version(setmgr_vsn *vsn) {
-    destroy_art_tree(&vsn->set_map);
-    free(vsn);
+
+// Deletes old versions from the delta lists, and calls
+// delete_set on the sets in the destroyed list.
+static int delete_old_versions(hlld_setmgr *mgr, unsigned long long min_vsn) {
+    // Get the merged in pending ops, lock to avoid a race
+    pthread_mutex_lock(&mgr->write_lock);
+    set_list *old = delta_versions(mgr->delta, &mgr->delta, min_vsn);
+    pthread_mutex_unlock(&mgr->write_lock);
+
+    // Delete the sets now that we have merged into both trees
+    set_list *next, *current = old;
+    while (current) {
+        if (!current->create)
+            delete_set(current->set);
+
+        next = current->next;
+        free(current);
+        current = next;
+    }
+    return 0;
 }
 
-// Recursively waits and cleans up old versions
-static int clean_old_versions(setmgr_vsn *v, unsigned long long min_vsn) {
-    // Recurse if possible
-    if (v->prev && clean_old_versions(v->prev, min_vsn))
-        v->prev = NULL;
 
-    // Abort if this version cannot be cleaned
-    if (v->vsn >= min_vsn) return 0;
-
-    // Log about the cleanup
-    syslog(LOG_DEBUG, "(setmgr) Destroying version %llu", v->vsn);
-
-    // Handle the cleanup
-    if (v->deleted) {
-        delete_set(v->deleted);
+// Determines the minimum visible version from the client list
+static unsigned long long client_min_vsn(hlld_setmgr *mgr) {
+    // Determine the minimum version
+    unsigned long long thread_vsn, min_vsn = mgr->vsn;
+    for (setmgr_client *cl=mgr->clients; cl != NULL; cl=cl->next) {
+        thread_vsn = cl->vsn;
+        if (thread_vsn < min_vsn) {
+            min_vsn = thread_vsn;
+        }
     }
+    return min_vsn;
+}
 
-    // Destroy this version
-    destroy_version(v);
-    return 1;
+
+// Swap the trees, and increment the version
+static unsigned long long swap_set_maps(hlld_setmgr *mgr, unsigned long long primary_vsn) {
+    art_tree *tmp = mgr->set_map;
+    mgr->set_map = mgr->alt_set_map;
+    mgr->alt_set_map = tmp;
+
+    // Set the version the primary represents
+    mgr->primary_vsn = primary_vsn;
+
+    // Lock the version update
+    pthread_mutex_lock(&mgr->write_lock);
+    unsigned long long new_vsn = ++(mgr->vsn);
+    pthread_mutex_unlock(&mgr->write_lock);
+    return new_vsn;
 }
 
 
@@ -856,35 +947,44 @@ static int clean_old_versions(setmgr_vsn *v, unsigned long long min_vsn) {
 static void* setmgr_thread_main(void *in) {
     // Extract our arguments
     hlld_setmgr *mgr = in;
-
-    // Store the oldest version
-    setmgr_vsn *current;
     while (mgr->should_run) {
-        sleep(1);
-        if (!mgr->should_run) break;
-
-        // Do nothing if there is no older versions
-        current = mgr->latest;
-        if (!current->prev) continue;
+        // Do nothing if there is no changes
+        if (!mgr->delta) {
+            sleep(1);
+            continue;
+        }
 
         // Determine the minimum version
-        unsigned long long thread_vsn, min_vsn = current->vsn;
-        for (setmgr_client *cl=mgr->clients; cl != NULL; cl=cl->next) {
-            thread_vsn = cl->vsn;
-            if (thread_vsn < min_vsn) {
-                min_vsn = thread_vsn;
-            }
+        unsigned long long min_vsn = client_min_vsn(mgr);
+
+        // Warn if there are a lot of concurrent versions
+        if (mgr->vsn - min_vsn > WARN_THRESHOLD) {
+            syslog(LOG_WARNING, "Many concurrent versions detected! Either slow operations, or too many changes! Current: %llu, Minimum: %llu", mgr->vsn, min_vsn);
         }
 
-        // Check if it is too old
-        if (current->vsn - min_vsn > WARN_THRESHOLD) {
-            syslog(LOG_WARNING, "Many concurrent versions detected! Either slow operations, or too many changes! Current: %llu, Minimum: %llu", current->vsn, min_vsn);
+        // Merge the old versions into the alternate three
+        merge_old_versions(mgr, min_vsn);
+
+        // Swap the maps, get the swap version
+        unsigned long long swap_vsn = swap_set_maps(mgr, min_vsn);
+
+        /**
+         * Before updating the other tree, we need all the clients
+         * to reach the swap_vsn. This is because it is possible for
+         * clients to be operating inside the old tree doing a long
+         * running operation, such as a list. By waiting on the swap_vsn
+         * we have an implicit barrier that ensures clients have moved
+         * to the new map.
+         */
+        while (mgr->should_run && client_min_vsn(mgr) < swap_vsn) {
+            sleep(1);
         }
 
-        // Cleanup the old versions
-        pthread_mutex_lock(&mgr->vacuum_lock);
-        clean_old_versions(current, min_vsn);
-        pthread_mutex_unlock(&mgr->vacuum_lock);
+        // Merge the changes into the other tree now
+        merge_old_versions(mgr, min_vsn);
+
+        // Both trees have the changes incorporated, safe to delete
+        delete_old_versions(mgr, min_vsn);
     }
     return NULL;
 }
@@ -896,9 +996,11 @@ static void* setmgr_thread_main(void *in) {
  * but can be used in an embeded or test environment.
  */
 void setmgr_vacuum(hlld_setmgr *mgr) {
-    // Cleanup the old versions
-    pthread_mutex_lock(&mgr->vacuum_lock);
-    clean_old_versions(mgr->latest, mgr->latest->vsn);
-    pthread_mutex_unlock(&mgr->vacuum_lock);
+    // Merges all changes to both trees, deletes all old versions
+    unsigned long long vsn = mgr->vsn;
+    merge_old_versions(mgr, vsn);
+    swap_set_maps(mgr, vsn);
+    merge_old_versions(mgr, vsn);
+    delete_old_versions(mgr, vsn);
 }
 
