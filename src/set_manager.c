@@ -39,10 +39,17 @@ typedef struct setmgr_client {
     struct setmgr_client *next;
 } setmgr_client;
 
+// Enum of possible delta updates
+typedef enum {
+    CREATE,
+    DELETE,
+    BARRIER
+} delta_type;
+
 // Simple linked list of set wrappers
 typedef struct set_list {
     unsigned long long vsn;
-    char create;        // Is this a create or delete?
+    delta_type type;
     hlld_set_wrapper *set;
     struct set_list *next;
 } set_list;
@@ -114,7 +121,7 @@ static int set_map_list_cb(void *data, const char *key, uint32_t key_len, void *
 static int set_map_list_cold_cb(void *data, const char *key, uint32_t key_len, void *value);
 static int set_map_delete_cb(void *data, const char *key, uint32_t key_len, void *value);
 static int load_existing_sets(hlld_setmgr *mgr);
-static void create_delta_update(hlld_setmgr *mgr, int create, hlld_set_wrapper *set);
+static unsigned long long create_delta_update(hlld_setmgr *mgr, delta_type type, hlld_set_wrapper *set);
 static void* setmgr_thread_main(void *in);
 
 /**
@@ -135,10 +142,6 @@ int init_set_manager(hlld_config *config, int vacuum, hlld_setmgr **mgr) {
     // Initialize the locks
     pthread_mutex_init(&m->write_lock, NULL);
     INIT_HLLD_SPIN(&m->clients_lock);
-
-    // Initialize the versions
-    m->vsn = 1;
-    m->primary_vsn = 0;
 
     // Allocate storage for the art trees
     art_tree *trees = calloc(2, sizeof(art_tree));
@@ -194,7 +197,7 @@ int destroy_set_manager(hlld_setmgr *mgr) {
     while (current) {
         // Only delete pending creates, pending
         // deletes are still in the primary tree
-        if (current->create)
+        if (current->type == CREATE)
             delete_set(current->set);
         next = current->next;
         free(current);
@@ -426,7 +429,7 @@ int setmgr_drop_set(hlld_setmgr *mgr, char *set_name) {
     // Set the set to be non-active and mark for deletion
     set->is_active = 0;
     set->should_delete = 1;
-    create_delta_update(mgr, false, set);
+    create_delta_update(mgr, DELETE, set);
 
 LEAVE:
     pthread_mutex_unlock(&mgr->write_lock);
@@ -462,7 +465,7 @@ int setmgr_clear_set(hlld_setmgr *mgr, char *set_name) {
     // being deleted. Instead, it is merely closed.
     set->is_active = 0;
     set->should_delete = 0;
-    create_delta_update(mgr, false, set);
+    create_delta_update(mgr, DELETE, set);
 
 LEAVE:
     pthread_mutex_unlock(&mgr->write_lock);
@@ -523,16 +526,18 @@ int setmgr_list_sets(hlld_setmgr *mgr, char *prefix, hlld_set_list_head **head) 
         art_iter(mgr->set_map, set_map_list_cb, h);
 
     // Joy... we have to potentially handle the delta updates
-    if (mgr->primary_vsn + 1 == mgr->vsn) return 0;
+    if (mgr->primary_vsn == mgr->vsn) return 0;
 
     set_list *current = mgr->delta;
     hlld_set_wrapper *s;
     while (current) {
         // Check if this is a match (potential prefix)
-        s = current->set;
-        if (!prefix_len || !strncmp(s->set->set_name, prefix, prefix_len)) {
+        if (current->type == CREATE) {
             s = current->set;
-            set_map_list_cb(h, s->set->set_name, 0, s);
+            if (!prefix_len || !strncmp(s->set->set_name, prefix, prefix_len)) {
+                s = current->set;
+                set_map_list_cb(h, s->set->set_name, 0, s);
+            }
         }
 
         // Don't seek past what the primary set map incorporates
@@ -609,13 +614,14 @@ static hlld_set_wrapper* find_set(hlld_setmgr *mgr, char *set_name) {
     if (set) return set;
 
     // Check if the primary has all delta changes
-    if (mgr->primary_vsn + 1 == mgr->vsn) return NULL;
+    if (mgr->primary_vsn == mgr->vsn) return NULL;
 
     // Search the delta list
     set_list *current = mgr->delta;
     while (current) {
         // Check if this is a match
-        if (strcmp(current->set->set->set_name, set_name) == 0) {
+        if (current->type != BARRIER &&
+            strcmp(current->set->set->set_name, set_name) == 0) {
             return current->set;
         }
 
@@ -695,7 +701,7 @@ static int add_set(hlld_setmgr *mgr, char *set_name, hlld_config *config, int is
 
     // Check if we are adding a delta value or directly updating ART tree
     if (delta)
-        create_delta_update(mgr, true, set);
+        create_delta_update(mgr, CREATE, set);
     else
         art_insert(mgr->set_map, set_name, strlen(set_name)+1, set);
 
@@ -841,122 +847,131 @@ static int load_existing_sets(hlld_setmgr *mgr) {
  * Creates a new delta update and adds to the head of the list.
  * This must be invoked with the write lock as it is unsafe.
  * @arg mgr The manager
- * @arg create Is this a create or delete
+ * @arg type The type of delta
  * @arg set The set that is affected
+ * @return The new version we created
  */
-static void create_delta_update(hlld_setmgr *mgr, int create, hlld_set_wrapper *set) {
+static unsigned long long create_delta_update(hlld_setmgr *mgr, delta_type type, hlld_set_wrapper *set) {
     set_list *delta = malloc(sizeof(set_list));
     delta->vsn = ++mgr->vsn;
-    delta->create = create;
+    delta->type = type;
     delta->set = set;
     delta->next = mgr->delta;
     mgr->delta = delta;
+    return delta->vsn;
 }
 
+/**
+ * Merges changes into the alternate tree from the delta lists
+ * Safety: Safe ONLY if no other thread is using alt_set_map
+ */
+static void merge_old_versions(hlld_setmgr *mgr, set_list *delta, unsigned long long min_vsn) {
+    // Handle older delta first (bottom up)
+    if (delta->next) merge_old_versions(mgr, delta->next, min_vsn);
 
-// Handle any delta updates creates. These are applied in reverse order,
-// since creates may be followed by a delete but not the other way around.
-static void apply_delta_updates(hlld_setmgr *mgr, set_list *updates) {
-    // Handle older updates first
-    if (updates->next) apply_delta_updates(mgr, updates->next);
+    // Check if we should skip this update
+    if (delta->vsn > min_vsn) return;
 
     // Handle current update
-    hlld_set_wrapper *s = updates->set;
-    if (updates->create) {
-        art_insert(mgr->alt_set_map, s->set->set_name, strlen(s->set->set_name)+1, s);
-    }   else {
-        art_delete(mgr->alt_set_map, s->set->set_name, strlen(s->set->set_name)+1);
-    }
-}
-
-
-// Merges changes into the alternate tree from the delta lists
-static int merge_old_versions(hlld_setmgr *mgr, unsigned long long min_vsn) {
-    set_list *current = mgr->delta;
-    while (current) {
-        if (current->vsn < min_vsn) {
-            apply_delta_updates(mgr, current);
+    hlld_set_wrapper *s = delta->set;
+    switch (delta->type) {
+        case CREATE:
+            art_insert(mgr->alt_set_map, s->set->set_name, strlen(s->set->set_name)+1, s);
             break;
-        }
-        current = current->next;
+        case DELETE:
+            art_delete(mgr->alt_set_map, s->set->set_name, strlen(s->set->set_name)+1);
+            break;
+        case BARRIER:
+            // Ignore the barrier...
+            break;
     }
-    return 0;
 }
 
+/**
+ * Swap the alternate / primary maps, sets the primary_vsn
+ * This is always safe, since its just a pointer swap.
+ */
+static void swap_set_maps(hlld_setmgr *mgr, unsigned long long primary_vsn) {
+    art_tree *tmp = mgr->set_map;
+    mgr->set_map = mgr->alt_set_map;
+    mgr->alt_set_map = tmp;
+    mgr->primary_vsn = primary_vsn;
+}
 
 /*
  * Scans a set_list* until it finds an entry with a version
  * less than min_vsn. It NULLs the pointer to that version
  * and returns a pointer to that node.
+ *
+ * Safety: This is ONLY safe if the minimum client version
+ * and the primary_vsn is strictly greater than the min_vsn argument.
+ * This ensures access to older delta entries will not happen.
  */
-static set_list* delta_versions(set_list *init, set_list **ref, unsigned long long min_vsn) {
+static set_list* remove_delta_versions(set_list *init, set_list **ref, unsigned long long min_vsn) {
     set_list *current = init;
     set_list **prev = ref;
-    while (current) {
-        if (current->vsn < min_vsn) {
-            // Set the pointer to this node to NULL
-            *prev = NULL;
-            return current;
-        }
+    while (current && current->vsn > min_vsn) {
         prev = &current->next;
         current = current->next;
     }
-    return NULL;
+
+    // NULL out the reference pointer to current node if any
+    if (current) *prev = NULL;
+    return current;
 }
 
-
-// Deletes old versions from the delta lists, and calls
-// delete_set on the sets in the destroyed list.
-static int delete_old_versions(hlld_setmgr *mgr, unsigned long long min_vsn) {
+/**
+ * Deletes old versions from the delta lists, and calls
+ * delete_set on the sets in the destroyed list.
+ *
+ * Safety: Same as remove_delta_versions
+ */
+static void delete_old_versions(hlld_setmgr *mgr, unsigned long long min_vsn) {
     // Get the merged in pending ops, lock to avoid a race
     pthread_mutex_lock(&mgr->write_lock);
-    set_list *old = delta_versions(mgr->delta, &mgr->delta, min_vsn);
+    set_list *old = remove_delta_versions(mgr->delta, &mgr->delta, min_vsn);
     pthread_mutex_unlock(&mgr->write_lock);
 
     // Delete the sets now that we have merged into both trees
     set_list *next, *current = old;
     while (current) {
-        if (!current->create)
-            delete_set(current->set);
-
+        if (current->type == DELETE) delete_set(current->set);
         next = current->next;
         free(current);
         current = next;
     }
-    return 0;
 }
 
-
-// Determines the minimum visible version from the client list
+/**
+ * Determines the minimum visible version from the client list
+ * Safety: Always safe
+ */
 static unsigned long long client_min_vsn(hlld_setmgr *mgr) {
     // Determine the minimum version
     unsigned long long thread_vsn, min_vsn = mgr->vsn;
     for (setmgr_client *cl=mgr->clients; cl != NULL; cl=cl->next) {
         thread_vsn = cl->vsn;
-        if (thread_vsn < min_vsn) {
-            min_vsn = thread_vsn;
-        }
+        if (thread_vsn < min_vsn) min_vsn = thread_vsn;
     }
     return min_vsn;
 }
 
-
-// Swap the trees, and increment the version
-static unsigned long long swap_set_maps(hlld_setmgr *mgr, unsigned long long primary_vsn) {
-    art_tree *tmp = mgr->set_map;
-    mgr->set_map = mgr->alt_set_map;
-    mgr->alt_set_map = tmp;
-
-    // Set the version the primary represents
-    mgr->primary_vsn = primary_vsn;
-
-    // Lock the version update
+/**
+ * Creates a barrier that is implicit by adding a
+ * new version, and waiting for all clients to reach
+ * that version. This can be used as a non-locking
+ * syncronization mechanism.
+ */
+static void version_barrier(hlld_setmgr *mgr) {
+    // Create a new delta
     pthread_mutex_lock(&mgr->write_lock);
-    unsigned long long new_vsn = ++(mgr->vsn);
+    unsigned long long vsn = create_delta_update(mgr, BARRIER, NULL);
     pthread_mutex_unlock(&mgr->write_lock);
-    return new_vsn;
-}
 
+    // Wait until we converge on the version
+    while (mgr->should_run && client_min_vsn(mgr) < vsn)
+        sleep(1);
+}
 
 /**
  * This thread is started after initialization to maintain
@@ -969,44 +984,70 @@ static unsigned long long swap_set_maps(hlld_setmgr *mgr, unsigned long long pri
 static void* setmgr_thread_main(void *in) {
     // Extract our arguments
     hlld_setmgr *mgr = in;
+    unsigned long long min_vsn, mgr_vsn;
     while (mgr->should_run) {
         // Do nothing if there is no changes
-        if (!mgr->delta) {
+        if (mgr->vsn == mgr->primary_vsn) {
             sleep(1);
             continue;
         }
 
-        // Determine the minimum version
-        unsigned long long min_vsn = client_min_vsn(mgr);
+        /*
+         * Because we use a version barrier, we always
+         * end up creating a new version when we try to
+         * apply delta updates. We need to handle the special case
+         * where we are 1 version behind and the only delta is
+         * a barrier. Do this by just updating primary_vsn.
+         */
+        mgr_vsn = mgr->vsn;
+        if ((mgr_vsn - mgr->primary_vsn) == 1) {
+            pthread_mutex_lock(&mgr->write_lock);
 
-        // Warn if there are a lot of concurrent versions
+            // Ensure no version created in the mean time
+            int should_continue = 0;
+            if (mgr_vsn == mgr->vsn && mgr->delta->type == BARRIER) {
+                mgr->primary_vsn = mgr_vsn;
+                should_continue = 1;
+            }
+
+            // Release the lock and see if we should loop back
+            pthread_mutex_unlock(&mgr->write_lock);
+            if (should_continue) {
+                syslog(LOG_DEBUG, "All updates applyed. (vsn: %llu)", mgr_vsn);
+                continue;
+            }
+        }
+
+        // Determine the minimum version
+        min_vsn = client_min_vsn(mgr);
+
+        // Warn if there are a lot of outstanding deltas
         if (mgr->vsn - min_vsn > WARN_THRESHOLD) {
-            syslog(LOG_WARNING, "Many concurrent versions detected! Either slow operations, or too many changes! Current: %llu, Minimum: %llu", mgr->vsn, min_vsn);
+            syslog(LOG_WARNING, "Many delta versions detected! min: %llu (vsn: %llu)",
+                    min_vsn, mgr->vsn);
+        } else {
+            syslog(LOG_DEBUG, "Applying delta update up to: %llu (vsn: %llu)",
+                    min_vsn, mgr->vsn);
         }
 
         // Merge the old versions into the alternate three
-        merge_old_versions(mgr, min_vsn);
+        merge_old_versions(mgr, mgr->delta, min_vsn);
 
-        // Swap the maps, get the swap version
-        unsigned long long swap_vsn = swap_set_maps(mgr, min_vsn - 1);
+        // Swap the maps
+        swap_set_maps(mgr, min_vsn);
 
-        /**
-         * Before updating the other tree, we need all the clients
-         * to reach the swap_vsn. This is because it is possible for
-         * clients to be operating inside the old tree doing a long
-         * running operation, such as a list. By waiting on the swap_vsn
-         * we have an implicit barrier that ensures clients have moved
-         * to the new map.
-         */
-        while (mgr->should_run && client_min_vsn(mgr) < swap_vsn) {
-            sleep(1);
-        }
+        // Wait on a barrier until nobody is using the old tree
+        version_barrier(mgr);
 
-        // Merge the changes into the other tree now
-        merge_old_versions(mgr, min_vsn);
+        // Merge the changes into the other tree now that its safe
+        merge_old_versions(mgr, mgr->delta, min_vsn);
 
         // Both trees have the changes incorporated, safe to delete
         delete_old_versions(mgr, min_vsn);
+
+        // Log that we finished
+        syslog(LOG_DEBUG, "Finished delta updates up to: %llu (vsn: %llu)",
+                min_vsn, mgr->vsn);
     }
     return NULL;
 }
@@ -1018,11 +1059,10 @@ static void* setmgr_thread_main(void *in) {
  * but can be used in an embeded or test environment.
  */
 void setmgr_vacuum(hlld_setmgr *mgr) {
-    // Merges all changes to both trees, deletes all old versions
     unsigned long long vsn = mgr->vsn;
-    merge_old_versions(mgr, vsn);
+    merge_old_versions(mgr, mgr->delta, vsn);
     swap_set_maps(mgr, vsn);
-    merge_old_versions(mgr, vsn);
+    merge_old_versions(mgr, mgr->delta, vsn);
     delete_old_versions(mgr, vsn);
 }
 
