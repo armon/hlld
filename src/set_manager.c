@@ -114,6 +114,7 @@ static int set_map_list_cb(void *data, const char *key, uint32_t key_len, void *
 static int set_map_list_cold_cb(void *data, const char *key, uint32_t key_len, void *value);
 static int set_map_delete_cb(void *data, const char *key, uint32_t key_len, void *value);
 static int load_existing_sets(hlld_setmgr *mgr);
+static void create_delta_update(hlld_setmgr *mgr, int create, hlld_set_wrapper *set);
 static void* setmgr_thread_main(void *in);
 
 /**
@@ -377,7 +378,7 @@ int setmgr_set_size(hlld_setmgr *mgr, char *set_name, uint64_t *est) {
  * -2 for internal error. -3 if there is a pending delete.
  */
 int setmgr_create_set(hlld_setmgr *mgr, char *set_name, hlld_config *custom_config) {
-    // Lock the creation
+    int res = 0;
     pthread_mutex_lock(&mgr->write_lock);
 
     /*
@@ -387,20 +388,19 @@ int setmgr_create_set(hlld_setmgr *mgr, char *set_name, hlld_config *custom_conf
      */
     hlld_set_wrapper *set = find_set(mgr, set_name);
     if (set) {
-        pthread_mutex_unlock(&mgr->write_lock);
-        return (set->is_active) ? -1 : -3;
+        res = (set->is_active) ? -1 : -3;
+        goto LEAVE;
     }
 
     // Use a custom config if provided, else the default
     hlld_config *config = (custom_config) ? custom_config : mgr->config;
 
     // Add the set
-    int res = add_set(mgr, set_name, config, 1, 1);
-    if (res) {
+    if (add_set(mgr, set_name, config, 1, 1)) {
         res = -2; // Internal error
     }
 
-    // Release the lock
+LEAVE:
     pthread_mutex_unlock(&mgr->write_lock);
     return res;
 }
@@ -413,31 +413,24 @@ int setmgr_create_set(hlld_setmgr *mgr, char *set_name, hlld_config *custom_conf
  */
 int setmgr_drop_set(hlld_setmgr *mgr, char *set_name) {
     // Lock the deletion
+    int res = 0;
     pthread_mutex_lock(&mgr->write_lock);
 
     // Get the set
     hlld_set_wrapper *set = take_set(mgr, set_name);
     if (!set) {
-        pthread_mutex_unlock(&mgr->write_lock);
-        return -1;
+        res = -1;
+        goto LEAVE;
     }
 
     // Set the set to be non-active and mark for deletion
     set->is_active = 0;
     set->should_delete = 1;
+    create_delta_update(mgr, false, set);
 
-    // Create a delta entry
-    set_list *delta = malloc(sizeof(set_list));
-    delta->vsn = mgr->vsn;
-    delta->create = 0;
-    delta->set = set;
-    delta->next = mgr->delta;
-    mgr->delta = delta;
-    mgr->vsn++;
-
-    // Unlock
+LEAVE:
     pthread_mutex_unlock(&mgr->write_lock);
-    return 0;
+    return res;
 }
 
 
@@ -449,39 +442,31 @@ int setmgr_drop_set(hlld_setmgr *mgr, char *set_name) {
  * if the set is not proxied.
  */
 int setmgr_clear_set(hlld_setmgr *mgr, char *set_name) {
-    // Lock the deletion
+    int res = 0;
     pthread_mutex_lock(&mgr->write_lock);
 
     // Get the set
     hlld_set_wrapper *set = take_set(mgr, set_name);
     if (!set) {
-        pthread_mutex_unlock(&mgr->write_lock);
-        return -1;
+        res = -1;
+        goto LEAVE;
     }
 
     // Check if the set is proxied
     if (!hset_is_proxied(set->set)) {
-        pthread_mutex_unlock(&mgr->write_lock);
-        return -2;
+        res = -2;
+        goto LEAVE;
     }
 
     // This is critical, as it prevents it from
     // being deleted. Instead, it is merely closed.
     set->is_active = 0;
     set->should_delete = 0;
+    create_delta_update(mgr, false, set);
 
-    // Create a delta entry
-    set_list *delta = malloc(sizeof(set_list));
-    delta->vsn = mgr->vsn;
-    delta->create = 0;
-    delta->set = set;
-    delta->next = mgr->delta;
-    mgr->delta = delta;
-    mgr->vsn++;
-
-    // Unlock
+LEAVE:
     pthread_mutex_unlock(&mgr->write_lock);
-    return 0;
+    return res;
 }
 
 
@@ -499,18 +484,20 @@ int setmgr_unmap_set(hlld_setmgr *mgr, char *set_name) {
     hlld_set_wrapper *set = take_set(mgr, set_name);
     if (!set) return -1;
 
-    // Only do it if we are not in memory
-    if (!set->set->set_config.in_memory) {
-        // Acquire the write lock
-        pthread_rwlock_wrlock(&set->rwlock);
+    // Bail if we are in memory only
+    if (set->set->set_config.in_memory)
+        goto LEAVE;
 
-        // Close the set
-        hset_close(set->set);
+    // Acquire the write lock
+    pthread_rwlock_wrlock(&set->rwlock);
 
-        // Release the lock
-        pthread_rwlock_unlock(&set->rwlock);
-    }
+    // Close the set
+    hset_close(set->set);
 
+    // Release the lock
+    pthread_rwlock_unlock(&set->rwlock);
+
+LEAVE:
     return 0;
 }
 
@@ -706,22 +693,11 @@ static int add_set(hlld_setmgr *mgr, char *set_name, hlld_config *config, int is
         return -1;
     }
 
-    // Check if we are adding a delta value
-    if (delta) {
-        // Create a delta entry
-        set_list *delta = malloc(sizeof(set_list));
-        delta->vsn = mgr->vsn;
-        delta->set = set;
-        delta->create = 1;
-        delta->next = mgr->delta;
-        mgr->delta = delta;
-        mgr->vsn++;
-
-    // Non-delta update. Usually only for initialization of the tree
-    // at start time, since otherwise this is unsafe.
-    } else {
+    // Check if we are adding a delta value or directly updating ART tree
+    if (delta)
+        create_delta_update(mgr, true, set);
+    else
         art_insert(mgr->set_map, set_name, strlen(set_name)+1, set);
-    }
 
     return 0;
 }
@@ -858,6 +834,23 @@ static int load_existing_sets(hlld_setmgr *mgr) {
     for (int i=0; i < num; i++) free(namelist[i]);
     free(namelist);
     return 0;
+}
+
+
+/**
+ * Creates a new delta update and adds to the head of the list.
+ * This must be invoked with the write lock as it is unsafe.
+ * @arg mgr The manager
+ * @arg create Is this a create or delete
+ * @arg set The set that is affected
+ */
+static void create_delta_update(hlld_setmgr *mgr, int create, hlld_set_wrapper *set) {
+    set_list *delta = malloc(sizeof(set_list));
+    delta->vsn = ++mgr->vsn;
+    delta->create = create;
+    delta->set = set;
+    delta->next = mgr->delta;
+    mgr->delta = delta;
 }
 
 
