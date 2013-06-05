@@ -1013,7 +1013,7 @@ static void* setmgr_thread_main(void *in) {
             // Release the lock and see if we should loop back
             pthread_mutex_unlock(&mgr->write_lock);
             if (should_continue) {
-                syslog(LOG_DEBUG, "All updates applyed. (vsn: %llu)", mgr_vsn);
+                syslog(LOG_INFO, "All updates applyed. (vsn: %llu)", mgr_vsn);
                 continue;
             }
         }
@@ -1046,7 +1046,7 @@ static void* setmgr_thread_main(void *in) {
         delete_old_versions(mgr, min_vsn);
 
         // Log that we finished
-        syslog(LOG_DEBUG, "Finished delta updates up to: %llu (vsn: %llu)",
+        syslog(LOG_INFO, "Finished delta updates up to: %llu (vsn: %llu)",
                 min_vsn, mgr->vsn);
     }
     return NULL;
