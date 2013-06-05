@@ -237,7 +237,6 @@ int hset_delete(hlld_set *set) {
     // Free the memory associated with scandir
     for (int i=0; i < num; i++) {
         char *file_path = join_path(set->full_path, namelist[i]->d_name);
-        syslog(LOG_INFO, "Deleting: %s.", file_path);
         if (unlink(file_path)) {
             syslog(LOG_ERR, "Failed to delete: %s. %s", file_path, strerror(errno));
         }
