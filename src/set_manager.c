@@ -97,6 +97,15 @@ struct hlld_setmgr {
     art_tree *set_map;
     art_tree *alt_set_map;
 
+    /**
+     * List of pending deletes. This is necessary
+     * because the set_map may reflect that a delete has
+     * taken place, while the vacuum thread has not yet performed the
+     * delete. This allows create to return a "Delete in progress".
+     */
+    hlld_set_list *pending_deletes;
+    hlld_spinlock pending_lock;
+
     // Delta lists for non-merged operations
     set_list *delta;
 };
@@ -142,6 +151,7 @@ int init_set_manager(hlld_config *config, int vacuum, hlld_setmgr **mgr) {
     // Initialize the locks
     pthread_mutex_init(&m->write_lock, NULL);
     INIT_HLLD_SPIN(&m->clients_lock);
+    INIT_HLLD_SPIN(&m->pending_lock);
 
     // Allocate storage for the art trees
     art_tree *trees = calloc(2, sizeof(art_tree));
@@ -394,6 +404,21 @@ int setmgr_create_set(hlld_setmgr *mgr, char *set_name, hlld_config *custom_conf
         res = (set->is_active) ? -1 : -3;
         goto LEAVE;
     }
+
+    // Scan the pending delete queue
+    LOCK_HLLD_SPIN(&mgr->pending_lock);
+    if (mgr->pending_deletes) {
+        hlld_set_list *node = mgr->pending_deletes;
+        while (node) {
+            if (!strcmp(node->set_name, set_name)) {
+                res = -3; // Pending delete
+                UNLOCK_HLLD_SPIN(&mgr->pending_lock);
+                goto LEAVE;
+            }
+            node = node->next;
+        }
+    }
+    UNLOCK_HLLD_SPIN(&mgr->pending_lock);
 
     // Use a custom config if provided, else the default
     hlld_config *config = (custom_config) ? custom_config : mgr->config;
@@ -888,6 +913,52 @@ static void merge_old_versions(hlld_setmgr *mgr, set_list *delta, unsigned long 
 }
 
 /**
+ * Updates the pending deletes list with a list of pending deletes
+ */
+static void mark_pending_deletes(hlld_setmgr *mgr, unsigned long long min_vsn) {
+    hlld_set_list *tmp, *pending = NULL;
+
+    // Add each delete
+    set_list *delta = mgr->delta;
+    while (delta) {
+        if (delta->vsn <= min_vsn && delta->type == DELETE) {
+            tmp = malloc(sizeof(hlld_set_list));
+            tmp->set_name = strdup(delta->set->set->set_name);
+            tmp->next = pending;
+            pending = tmp;
+        }
+        delta = delta->next;
+    }
+
+    LOCK_HLLD_SPIN(&mgr->pending_lock);
+    mgr->pending_deletes = pending;
+    UNLOCK_HLLD_SPIN(&mgr->pending_lock);
+}
+
+/**
+ * Clears the pending deletes
+ */
+static void clear_pending_deletes(hlld_setmgr *mgr) {
+    // Get a reference to the head
+    hlld_set_list *pending = mgr->pending_deletes;
+    if (!pending) return;
+
+    // Set the pending list to NULL safely
+    LOCK_HLLD_SPIN(&mgr->pending_lock);
+    mgr->pending_deletes = NULL;
+    UNLOCK_HLLD_SPIN(&mgr->pending_lock);
+
+    // Free the nodes
+    hlld_set_list *next;
+    while (pending) {
+        free(pending->set_name);
+        next = pending->next;
+        free(pending);
+        pending = next;
+    }
+}
+
+/**
  * Swap the alternate / primary maps, sets the primary_vsn
  * This is always safe, since its just a pointer swap.
  */
@@ -1033,6 +1104,16 @@ static void* setmgr_thread_main(void *in) {
         // Merge the old versions into the alternate three
         merge_old_versions(mgr, mgr->delta, min_vsn);
 
+        /*
+         * Mark any pending deletes so that create does not allow
+         * a set to be created before we manage to call delete_old_versions.
+         * There is an unforunate race that can happen if a client
+         * does a create/drop/create cycle, where the create/drop are
+         * reflected in the set_map, and thus the second create is allowed
+         * BEFORE we have had a chance to actually handle the delete.
+         */
+        mark_pending_deletes(mgr, min_vsn);
+
         // Swap the maps
         swap_set_maps(mgr, min_vsn);
 
@@ -1044,6 +1125,10 @@ static void* setmgr_thread_main(void *in) {
 
         // Both trees have the changes incorporated, safe to delete
         delete_old_versions(mgr, min_vsn);
+
+        // Clear the pending delete list, since delete_old_versions() will
+        // block untill all deletes are completed.
+        clear_pending_deletes(mgr);
 
         // Log that we finished
         syslog(LOG_INFO, "Finished delta updates up to: %llu (vsn: %llu)",
