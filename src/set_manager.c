@@ -225,10 +225,7 @@ int destroy_set_manager(hlld_setmgr *mgr) {
     // Destroy the ART trees
     destroy_art_tree(mgr->set_map);
     destroy_art_tree(mgr->alt_set_map);
-    if (mgr->set_map < mgr->alt_set_map)
-        free(mgr->set_map);
-    else
-        free(mgr->alt_set_map);
+    free((mgr->set_map < mgr->alt_set_map) ? mgr->set_map : mgr->alt_set_map);
 
     // Free the manager
     free(mgr);
