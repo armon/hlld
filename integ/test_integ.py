@@ -101,11 +101,11 @@ class TestInteg(object):
         assert fh.readline() == "Done\n"
         server.sendall("create test\n")
         assert fh.readline() == "Done\n"
-
+        time.sleep(2)
         server.sendall("list foo\n")
         assert fh.readline() == "START\n"
-        assert "foobaz" in fh.readline()
         assert "foobar" in fh.readline()
+        assert "foobaz" in fh.readline()
         assert fh.readline() == "END\n"
 
     def test_create_bad(self, servers):
@@ -386,11 +386,12 @@ class TestInteg(object):
         assert fh.readline() == "Done\n"
         assert fh.readline() == "Done\n"
         assert fh.readline() == "Done\n"
+        time.sleep(2)
         server.sendall("list filter:test\n")
         assert fh.readline() == "START\n"
-        assert "filter:test:very:long:sub:prefix:1" in fh.readline()
-        assert "filter:test:very:long:common:prefix:2" in fh.readline()
         assert "filter:test:very:long:common:prefix:1" in fh.readline()
+        assert "filter:test:very:long:common:prefix:2" in fh.readline()
+        assert "filter:test:very:long:sub:prefix:1" in fh.readline()
         assert fh.readline() == "END\n"
 
 if __name__ == "__main__":
