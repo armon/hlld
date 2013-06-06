@@ -2,6 +2,13 @@
 #include <sys/time.h>
 #include "background.h"
 
+/**
+ * After how many background operations should we force a client
+ * checkpoint. This allows the vacuum thread to make progress even
+ * if we have a very slow background task
+ */
+#define PERIODIC_CHECKPOINT 64
+
 static int timediff_msec(struct timeval *t1, struct timeval *t2);
 static void* flush_thread_main(void *in);
 static void* unmap_thread_main(void *in);
@@ -107,8 +114,10 @@ static void* flush_thread_main(void *in) {
             // Flush all, ignore errors since
             // sets might get deleted in the process
             hlld_set_list *node = head->head;
+            unsigned int cmds = 0;
             while (node) {
                 setmgr_flush_set(mgr, node->set_name);
+                if (!(++cmds % PERIODIC_CHECKPOINT)) setmgr_client_checkpoint(mgr);
                 node = node->next;
             }
 
@@ -152,9 +161,11 @@ static void* unmap_thread_main(void *in) {
 
             // Close the sets, save memory
             hlld_set_list *node = head->head;
+            unsigned int cmds = 0;
             while (node) {
                 syslog(LOG_DEBUG, "Unmapping set '%s' for being cold.", node->set_name);
                 setmgr_unmap_set(mgr, node->set_name);
+                if (!(++cmds % PERIODIC_CHECKPOINT)) setmgr_client_checkpoint(mgr);
                 node = node->next;
             }
 
