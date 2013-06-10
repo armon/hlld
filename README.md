@@ -109,7 +109,7 @@ Each configuration option is documented below:
 
  * data\_dir : The data directory that is used. Defaults to /tmp/hlld
 
- * log\_level : The logging level that bloomd should use. One of:
+ * log\_level : The logging level that hlld should use. One of:
     DEBUG, INFO, WARN, ERROR, or CRITICAL. All logs go to syslog,
     and stderr if that is a TTY. Default is INFO.
 
@@ -212,7 +212,7 @@ For example, doing:
 
     list foo
 
-Will return a list of all filters with the foo prefix. Here is an example response:
+Will return a list of all sets with the foo prefix. Here is an example response:
 
     START
     foobar 0.010000 14 13108 0
