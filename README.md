@@ -67,10 +67,8 @@ Here is an example configuration file:
     # Settings for hlld
     [hlld]
     tcp_port = 4553
-    udp_port = 4554
     data_dir = /mnt/hlld
     log_level = INFO
-    cold_interval = 3600
     flush_interval = 60
     default_eps = 0.02
     workers = 2
@@ -79,6 +77,85 @@ Here is an example configuration file:
 Then run hlld, pointing it to that file:
 
     hlld -f /etc/hlld.conf
+
+A full list of configuration options is below.
+
+Clients
+----------
+
+Here is a list of known client implementations:
+
+* Python : https://github.com/armon/pyhlld
+
+Here is a list of "best-practices" for client implementations:
+
+* Maintain a set of open connections to the server to minimize connection time
+* Make use of the bulk operations when possible, as they are more efficient.
+* For long keys, it is better to do a client-side hash (SHA1 at least), and send
+  the hash as the key to minimize network traffic.
+
+
+Configuration Options
+---------------------
+
+Each configuration option is documented below:
+
+ * tcp\_port : Integer, sets the tcp port to listen on. Default 4553.
+
+ * port: Same as above. For compatibility.
+
+ * udp\_port : Integer, sets the udp port. Currently listened on
+                but otherwise unused. Default 4554.
+
+ * data\_dir : The data directory that is used. Defaults to /tmp/hlld
+
+ * log\_level : The logging level that bloomd should use. One of:
+    DEBUG, INFO, WARN, ERROR, or CRITICAL. All logs go to syslog,
+    and stderr if that is a TTY. Default is INFO.
+
+ * workers : This controls the number of worker threads that are used.
+   Defaults to 1. If many different sets are used, it can be advantageous
+   to increase this to the number of CPU cores. If only a few sets are used,
+   the increased lock contention may reduce throughput, and a single worker
+   may be better.
+
+ * flush\_interval : This is the time interval in seconds in which
+    sets are flushed to disk. Defaults to 60 seconds. Set to 0 to
+    disable.
+
+ * cold\_interval : If a set is not accessed (set or bulk), for
+    this amount of time, it is eligible to be removed from memory
+    and left only on disk. If a set is accessed, it will automatically
+    be faulted back into memory. Set to 3600 seconds by default (1 hour).
+    Set to 0 to disable cold faulting.
+
+ * in\_memory : If set to 1, then all sets are in-memory ONLY by
+    default. This means they are not persisted to disk, and are not
+    eligible for cold fault out. Defaults to 0.
+
+ * use\_mmap : If set to 1, the hlld internal buffer management
+    is disabled, and instead buffers use a plain mmap() and rely on
+    the kernel for all management. This increases data safety in the
+    case that hlld crashes, but has adverse affects on performance
+    if the total memory utilization of the system is high. In general,
+    this should be left to 0, which is the default.
+
+ * default\_eps: If not provided to create, this is the default
+    error of the HyperLogLog. This is an upper bound and is used to
+    compute the precision that should be used. This option overrides
+    a given default precision. Defaults to 1.625%, which is a precision
+    of 12. Only one of default\_eps or default\_precision should be provided.
+
+ * default\_precision : If not provided to create, this is the default
+    "precision" of the HyperLogLog. This controls the error in the size
+    estimate. This option overrides a given default eps. Defaults to 12,
+    which is results in a variance of about 1.625%. Only one of default\_eps
+    or default\_precision should be provided.
+
+
+It is important to note that reducing the error bound increases the
+required precision. The size utilization of a HyperLogLog increases
+exponentially with the precision, so it should be increased carefully.
 
 Protocol
 --------
@@ -218,21 +295,6 @@ running on the default port using just telnet::
     > list
     START
     END
-
-
-Clients
-----------
-
-Here is a list of known client implementations:
-
-* Python : https://github.com/armon/pyhlld
-
-Here is a list of "best-practices" for client implementations:
-
-* Maintain a set of open connections to the server to minimize connection time
-* Make use of the bulk operations when possible, as they are more efficient.
-* For long keys, it is better to do a client-side hash (SHA1 at least), and send
-  the hash as the key to minimize network traffic.
 
 
 Performance
