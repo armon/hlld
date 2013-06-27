@@ -3,6 +3,19 @@
 #include "background.h"
 
 /**
+ * This defines how log we sleep between loop iterations
+ * in microseconds
+ */
+#define PERIODIC_TIME_USEC 250000
+
+/**
+ * Based on the PERIODIC_TIME_USEC, this should
+ * convert 'ticks' to seconds. One tick occurs
+ * each PERIODIC_TIME_USEC interval
+ */
+#define TICK_TO_SEC(ticks) ((ticks / 4))
+
+/**
  * After how many background operations should we force a client
  * checkpoint. This allows the vacuum thread to make progress even
  * if we have a very slow background task
@@ -95,9 +108,9 @@ static void* flush_thread_main(void *in) {
     syslog(LOG_INFO, "Flush thread started. Interval: %d seconds.", config->flush_interval);
     unsigned int ticks = 0;
     while (*should_run) {
-        sleep(1);
+        usleep(PERIODIC_TIME_USEC);
         setmgr_client_checkpoint(mgr);
-        if ((++ticks % config->flush_interval) == 0 && *should_run) {
+        if ((TICK_TO_SEC(++ticks) % config->flush_interval) == 0 && *should_run) {
             // Time how long this takes
             struct timeval start, end;
             gettimeofday(&start, NULL);
@@ -144,9 +157,9 @@ static void* unmap_thread_main(void *in) {
     syslog(LOG_INFO, "Cold unmap thread started. Interval: %d seconds.", config->cold_interval);
     unsigned int ticks = 0;
     while (*should_run) {
-        sleep(1);
+        usleep(PERIODIC_TIME_USEC);
         setmgr_client_checkpoint(mgr);
-        if ((++ticks % config->cold_interval) == 0 && *should_run) {
+        if ((TICK_TO_SEC(++ticks) % config->cold_interval) == 0 && *should_run) {
             // Time how long this takes
             struct timeval start, end;
             gettimeofday(&start, NULL);
