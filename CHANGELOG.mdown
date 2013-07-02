@@ -1,6 +1,6 @@
 # 0.5.2
   * Bug fixes for background tasks being invoked too often
-  * Git SHA: 556e6f9
+  * Git SHA: 1c58072
 
 # 0.5.1
   * Increase the safety of connection handling. Prevents some crashing
