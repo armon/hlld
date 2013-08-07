@@ -19,6 +19,7 @@
 static const hlld_config DEFAULT_CONFIG = {
     4553,               // TCP defaults to 8673
     4554,               // UDP on 8674
+    "0.0.0.0",          // Default listen on 0.0.0.0
     "/tmp/hlld",        // Tmp data dir, until configured
     "INFO",             // INFO level
     LOG_INFO,
@@ -139,6 +140,8 @@ static int config_callback(void* user, const char* section, const char* name, co
         config->data_dir = strdup(value);
     } else if (NAME_MATCH("log_level")) {
         config->log_level = strdup(value);
+    } else if (NAME_MATCH("bind_address")) {
+        config->bind_address = strdup(value);
 
         // Unknown parameter?
     } else {

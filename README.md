@@ -107,6 +107,8 @@ Each configuration option is documented below:
  * udp\_port : Integer, sets the udp port. Currently listened on
                 but otherwise unused. Default 4554.
 
+ * bind\_address: The IP address to bind on. Defaults to 0.0.0.0.
+
  * data\_dir : The data directory that is used. Defaults to /tmp/hlld
 
  * log\_level : The logging level that hlld should use. One of:
