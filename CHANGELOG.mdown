@@ -1,6 +1,7 @@
 # 0.5.3
 
  * Adding support for bind\_address
+ * Git SHA: 12a67ab
 
 # 0.5.2
   * Bug fixes for background tasks being invoked too often
