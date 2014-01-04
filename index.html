@@ -124,6 +124,8 @@ workers = 2
 <ul>
 <li>Python : <a href="https://github.com/armon/pyhlld">https://github.com/armon/pyhlld</a>
 </li>
+<li>Ruby: <a href="https://github.com/mdlayher/rb-hlld">https://github.com/mdlayher/rb-hlld</a>
+</li>
 </ul><p>Here is a list of "best-practices" for client implementations:</p>
 
 <ul>
@@ -214,11 +216,11 @@ and ending the line in a newline (carriage return is optional).</p>
 </code></pre>
 
 <p>Where <code>set_name</code> is the name of the set,
-and can contain the characters a-z, A-Z, 0-9, ., _.
+and can contain the characters a-z, A-Z, 0-9, ., <em>.
 If a precision is provided the set
 will be created with the given bits of precision, otherwise the configured default value will be used.
 If a maximum epsilon is provided, that will be used to compute a precision, otherwise the configured default is used.
-You can optionally specify in_memory to force the set to not be persisted to disk. If both precision and
+You can optionally specify in</em>memory to force the set to not be persisted to disk. If both precision and
 eps are specified, it is not specified which one will be used. Generally, only one should be provided,
 as the other will be computed.</p>
 
