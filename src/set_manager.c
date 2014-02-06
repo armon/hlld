@@ -132,9 +132,9 @@ static hlld_set_wrapper* find_set(hlld_setmgr *mgr, char *set_name);
 static hlld_set_wrapper* take_set(hlld_setmgr *mgr, char *set_name);
 static void delete_set(hlld_set_wrapper *set);
 static int add_set(hlld_setmgr *mgr, char *set_name, hlld_config *config, int is_hot, int delta);
-static int set_map_list_cb(void *data, const char *key, uint32_t key_len, void *value);
-static int set_map_list_cold_cb(void *data, const char *key, uint32_t key_len, void *value);
-static int set_map_delete_cb(void *data, const char *key, uint32_t key_len, void *value);
+static int set_map_list_cb(void *data, const unsigned char *key, uint32_t key_len, void *value);
+static int set_map_list_cold_cb(void *data, const unsigned char *key, uint32_t key_len, void *value);
+static int set_map_delete_cb(void *data, const unsigned char *key, uint32_t key_len, void *value);
 static int load_existing_sets(hlld_setmgr *mgr);
 static unsigned long long create_delta_update(hlld_setmgr *mgr, delta_type type, hlld_set_wrapper *set);
 static void* setmgr_thread_main(void *in);
@@ -549,7 +549,7 @@ int setmgr_list_sets(hlld_setmgr *mgr, char *prefix, hlld_set_list_head **head) 
     int prefix_len = 0;
     if (prefix) {
         prefix_len = strlen(prefix);
-        art_iter_prefix(mgr->set_map, prefix, prefix_len, set_map_list_cb, h);
+        art_iter_prefix(mgr->set_map, (unsigned char*)prefix, prefix_len, set_map_list_cb, h);
     } else
         art_iter(mgr->set_map, set_map_list_cb, h);
 
@@ -564,7 +564,7 @@ int setmgr_list_sets(hlld_setmgr *mgr, char *prefix, hlld_set_list_head **head) 
             s = current->set;
             if (!prefix_len || !strncmp(s->set->set_name, prefix, prefix_len)) {
                 s = current->set;
-                set_map_list_cb(h, s->set->set_name, 0, s);
+                set_map_list_cb(h, (unsigned char*)s->set->set_name, 0, s);
             }
         }
 
@@ -636,7 +636,7 @@ void setmgr_cleanup_list(hlld_set_list_head *head) {
  */
 static hlld_set_wrapper* find_set(hlld_setmgr *mgr, char *set_name) {
     // Search the tree first
-    hlld_set_wrapper *set = art_search(mgr->set_map, set_name, strlen(set_name)+1);
+    hlld_set_wrapper *set = art_search(mgr->set_map, (unsigned char*)set_name, strlen(set_name)+1);
 
     // If we found the set, check if it is active
     if (set) return set;
@@ -731,7 +731,7 @@ static int add_set(hlld_setmgr *mgr, char *set_name, hlld_config *config, int is
     if (delta)
         create_delta_update(mgr, CREATE, set);
     else
-        art_insert(mgr->set_map, set_name, strlen(set_name)+1, set);
+        art_insert(mgr->set_map, (unsigned char*)set_name, strlen(set_name)+1, set);
 
     return 0;
 }
@@ -741,7 +741,7 @@ static int add_set(hlld_setmgr *mgr, char *set_name, hlld_config *config, int is
  * to list all the sets. Only works if value is
  * not NULL.
  */
-static int set_map_list_cb(void *data, const char *key, uint32_t key_len, void *value) {
+static int set_map_list_cb(void *data, const unsigned char *key, uint32_t key_len, void *value) {
     (void)key_len;
     // set out the non-active nodes
     hlld_set_wrapper *set = value;
@@ -754,7 +754,7 @@ static int set_map_list_cb(void *data, const char *key, uint32_t key_len, void *
     hlld_set_list *node = malloc(sizeof(hlld_set_list));
 
     // Setup
-    node->set_name = strdup(key);
+    node->set_name = strdup((char*)key);
     node->next = NULL;
 
     // Inject at head if first node
@@ -776,7 +776,7 @@ static int set_map_list_cb(void *data, const char *key, uint32_t key_len, void *
  * to list cold sets. Only works if value is
  * not NULL.
  */
-static int set_map_list_cold_cb(void *data, const char *key, uint32_t key_len, void *value) {
+static int set_map_list_cold_cb(void *data, const unsigned char *key, uint32_t key_len, void *value) {
     (void)key_len;
     // Cast the inputs
     hlld_set_list_head *head = data;
@@ -797,7 +797,7 @@ static int set_map_list_cold_cb(void *data, const char *key, uint32_t key_len, v
     hlld_set_list *node = malloc(sizeof(hlld_set_list));
 
     // Setup
-    node->set_name = strdup(key);
+    node->set_name = strdup((char*)key);
     node->next = head->head;
 
     // Inject
@@ -810,7 +810,7 @@ static int set_map_list_cold_cb(void *data, const char *key, uint32_t key_len, v
  * Called as part of the hashmap callback
  * to cleanup the sets.
  */
-static int set_map_delete_cb(void *data, const char *key, uint32_t key_len, void *value) {
+static int set_map_delete_cb(void *data, const unsigned char *key, uint32_t key_len, void *value) {
     (void)data;
     (void)key;
     (void)key_len;
@@ -904,10 +904,10 @@ static void merge_old_versions(hlld_setmgr *mgr, set_list *delta, unsigned long 
     hlld_set_wrapper *s = delta->set;
     switch (delta->type) {
         case CREATE:
-            art_insert(mgr->alt_set_map, s->set->set_name, strlen(s->set->set_name)+1, s);
+            art_insert(mgr->alt_set_map, (unsigned char*)s->set->set_name, strlen(s->set->set_name)+1, s);
             break;
         case DELETE:
-            art_delete(mgr->alt_set_map, s->set->set_name, strlen(s->set->set_name)+1);
+            art_delete(mgr->alt_set_map, (unsigned char*)s->set->set_name, strlen(s->set->set_name)+1);
             break;
         case BARRIER:
             // Ignore the barrier...
