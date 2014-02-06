@@ -1,3 +1,8 @@
+# 0.5.4
+
+  * Bug fix for potential issues related to non-ASCII filter names
+  * Git SHA: 7e2a973
+
 # 0.5.3
 
  * Adding support for bind\_address
