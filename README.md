@@ -85,6 +85,7 @@ Clients
 
 Here is a list of known client implementations:
 
+* Perl: https://github.com/Weborama/Net-Hlld
 * Python : https://github.com/armon/pyhlld
 * Ruby: https://github.com/mdlayher/rb-hlld
 
