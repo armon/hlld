@@ -88,6 +88,7 @@ Here is a list of known client implementations:
 * Perl: https://github.com/Weborama/Net-Hlld
 * Python : https://github.com/armon/pyhlld
 * Ruby: https://github.com/mdlayher/rb-hlld
+* Node.js: https://github.com/JamesS237/node-hlld
 
 Here is a list of "best-practices" for client implementations:
 
