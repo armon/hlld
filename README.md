@@ -224,7 +224,7 @@ Will return a list of all sets with the foo prefix. Here is an example response:
     END
 
 This indicates a single set named foobar, with a variance
-of 0.02, precision 12, a 4096 byte size, a current size estimate of 1540
+of 0.01, precision 14, a 13108 byte size, a current size estimate of 0
 items.
 
 The ``drop``, ``close`` and ``clear`` commands are like create, but only takes a set name.
