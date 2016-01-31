@@ -85,6 +85,7 @@ Clients
 
 Here is a list of known client implementations:
 
+* Go: https://github.com/armon/go-hlld
 * Perl: https://github.com/Weborama/Net-Hlld
 * Python : https://github.com/armon/pyhlld
 * Ruby: https://github.com/mdlayher/rb-hlld
