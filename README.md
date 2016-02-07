@@ -9,7 +9,7 @@ which is human readable, and similar to memcached.
 HyperLogLog's are a relatively new sketching data structure.
 They are used to estimate cardinality, i.e. the unique number
 of items in a set. They are based on the observation that any
-bit in a "good" hash function is indepedenent of any other
+bit in a "good" hash function is independent of any other
 bit and that the probability of getting a string of N
 bits all set to the same value is 1/(2^N). There is a lot more in
 the math, but that is the basic intuition. What is even more
@@ -245,7 +245,7 @@ to be set at once. Keys must be separated by a space:
 
     bulk set_name key1 [key_2 [key_3 [key_N]]]
 
-The bulk and set commands can also be called by their aliasses
+The bulk and set commands can also be called by their aliases
 b and s respectively.
 
 The ``info`` command takes a set name, and returns
