@@ -6,7 +6,7 @@
 #include <fcntl.h>
 #include <strings.h>
 #include <sys/mman.h>
-#include <sys/errno.h>
+#include <errno.h>
 #include <sys/stat.h>
 #include <syslog.h>
 #include "bitmap.h"
