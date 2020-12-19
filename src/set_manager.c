@@ -1110,7 +1110,7 @@ static void* setmgr_thread_main(void *in) {
         /*
          * Mark any pending deletes so that create does not allow
          * a set to be created before we manage to call delete_old_versions.
-         * There is an unforunate race that can happen if a client
+         * There is an unfortunate race that can happen if a client
          * does a create/drop/create cycle, where the create/drop are
          * reflected in the set_map, and thus the second create is allowed
          * BEFORE we have had a chance to actually handle the delete.
